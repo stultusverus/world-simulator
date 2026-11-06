@@ -209,6 +209,7 @@ export class CreationScreen {
 
   private describe(meta: SaveMeta): string {
     const size = SIZE_COPY[meta.size]?.name ?? `${meta.size}²`;
-    return `${formatYear(meta.year)} · ${formatNumber(meta.population)} people · ${meta.factions} factions · ${size} world`;
+    const factionWord = meta.factions === 1 ? 'faction' : 'factions';
+    return `${formatYear(meta.year)} · ${formatNumber(meta.population)} people · ${meta.factions} ${factionWord} · ${size} world`;
   }
 }

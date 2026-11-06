@@ -120,6 +120,7 @@ export interface Civ {
   traits: TraitId[];
   religion: string;
   religionOf: number;
+  piety: number;
   era: Era;
   knowledge: number;
   food: number;

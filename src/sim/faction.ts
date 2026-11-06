@@ -48,6 +48,7 @@ export function foundFaction(game: Game, xIn: number, yIn: number, options: Foun
     traits: pickTraits(game),
     religion: makeReligionName(game.world.seedText, id),
     religionOf: id,
+    piety: game.rng.int(0, 26),
     era: 0,
     knowledge: 0,
     food: 40,

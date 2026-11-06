@@ -52,7 +52,7 @@ export function runProgress(game: Game): void {
     }
 
     const zealous = civ.traits.includes('zealous') ? 10 : 0;
-    civ.faith = Math.max(0, Math.min(100, 6 + temples * 14 + priests * 2.5 + civ.era * 4 + zealous));
+    civ.faith = Math.max(0, Math.min(100, 6 + civ.piety + temples * 14 + priests * 2.5 + civ.era * 4 + zealous));
 
     for (const milestone of [25, 50, 100, 180]) {
       if (civ.population >= milestone && civ.maxPopulation < milestone) {
@@ -76,12 +76,12 @@ export function runProgress(game: Game): void {
       const a = alive[i];
       const b = alive[j];
       if (a.religionOf === b.religionOf) continue;
-      if (b.faith + 12 > a.faith) continue;
+      if (b.faith + 15 > a.faith) continue;
       const relation = game.relations[a.id * MAX_FACTIONS + b.id];
-      if (relation < 8 || tick < 25) continue;
+      if (relation < -50 || tick < 25) continue;
       const zealous = a.traits.includes('zealous') ? 1.8 : 1;
       const resistant = b.traits.includes('zealous') ? 0.5 : 1;
-      const chance = 0.0024 * ((a.faith - b.faith) / 100) * zealous * resistant;
+      const chance = 0.005 * ((a.faith - b.faith) / 100) * zealous * resistant;
       if (!game.rng.chance(chance)) continue;
       b.religion = a.religion;
       b.religionOf = a.religionOf;

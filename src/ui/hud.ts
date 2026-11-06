@@ -369,12 +369,15 @@ export class Hud {
   private renderFast(game: Game, force: boolean): void {
     this.yearLabel.textContent = formatYear(game.year);
     this.worldName.textContent = game.worldName;
+    const factionWord = game.stats.factions === 1 ? 'faction' : 'factions';
+    const warWord = game.stats.wars === 1 ? 'war' : 'wars';
+    const peopleWord = game.stats.population === 1 ? 'person' : 'people';
     this.worldStats.innerHTML = `
-      <span><b>${formatNumber(game.stats.population)}</b> people</span>
+      <span><b>${formatNumber(game.stats.population)}</b> ${peopleWord}</span>
       <span class="sep">·</span>
-      <span><b>${game.stats.factions}</b> factions</span>
+      <span><b>${game.stats.factions}</b> ${factionWord}</span>
       <span class="sep">·</span>
-      <span><b>${game.stats.wars}</b> wars</span>
+      <span><b>${game.stats.wars}</b> ${warWord}</span>
       <span class="sep">·</span>
       <span><b>${formatNumber(game.stats.animals)}</b> wildlife</span>
     `;

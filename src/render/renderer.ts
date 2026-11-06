@@ -58,7 +58,7 @@ export class Renderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (!ctx) throw new Error('2D canvas context unavailable');
     this.ctx = ctx;
     this.atlas = createSpriteAtlas();

@@ -36,7 +36,7 @@ export const MAX_CATCHUP_TICKS = 6;
 /** Year at which the world begins. */
 export const START_YEAR = 1;
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const SAVE_CHRONICLE_LIMIT = 300;
 export const CHRONICLE_LIMIT = 600;

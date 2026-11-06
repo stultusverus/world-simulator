@@ -107,7 +107,7 @@ export class SaveMenu {
       const meta = bySlot.get(slot);
       const isAuto = slot === AUTOSAVE_SLOT;
       const details = meta
-        ? `${formatYear(meta.year)} · ${formatNumber(meta.population)} people · ${meta.factions} factions · ${meta.size}² tiles<br><span class="save-date">${new Date(meta.savedAt).toLocaleString(undefined, {
+        ? `${formatYear(meta.year)} · ${formatNumber(meta.population)} people · ${meta.factions} ${meta.factions === 1 ? 'faction' : 'factions'} · ${meta.size}² tiles<br><span class="save-date">${new Date(meta.savedAt).toLocaleString(undefined, {
             month: 'short',
             day: 'numeric',
             hour: '2-digit',

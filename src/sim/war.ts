@@ -206,17 +206,17 @@ function moveToward(game: Game, id: number, tx: number, ty: number, speed: numbe
   const agents = game.agents;
   let path = game.soldierPaths.get(id);
   if (!path || path.targetKey !== targetKey || path.index >= path.path.length) {
-    if (path && path.targetKey === targetKey && path.path.length === 0) return;
     const found = findPath(
       game.world,
-      Math.round(agents.x[id]),
-      Math.round(agents.y[id]),
-      Math.round(tx),
-      Math.round(ty),
+      Math.floor(agents.x[id]),
+      Math.floor(agents.y[id]),
+      Math.floor(tx),
+      Math.floor(ty),
       1800,
     );
     if (!found || found.length === 0) {
-      game.soldierPaths.set(id, { path: [], index: 0, targetKey });
+      // Retry on the next movement attempt; a failed search is not a route.
+      game.soldierPaths.delete(id);
       return;
     }
     path = { path: found, index: 0, targetKey };

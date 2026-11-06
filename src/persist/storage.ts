@@ -15,21 +15,21 @@ interface StoredRecord {
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 const memory = new Map<string, GameSave>();
-let persistent = true;
+export type StorageStatus = 'pending' | 'persistent' | 'temporary';
+let storageStatus: StorageStatus = 'pending';
 
 function openDb(): Promise<IDBDatabase | null> {
-  if (typeof indexedDB === 'undefined') {
-    persistent = false;
-    return Promise.resolve(null);
-  }
   if (!dbPromise) {
     dbPromise = new Promise((resolve) => {
+      const fallback = (): void => {
+        storageStatus = 'temporary';
+        resolve(null);
+      };
       let request: IDBOpenDBRequest;
       try {
         request = indexedDB.open(DB_NAME, DB_VERSION);
       } catch {
-        persistent = false;
-        resolve(null);
+        fallback();
         return;
       }
       request.onupgradeneeded = () => {
@@ -38,15 +38,17 @@ function openDb(): Promise<IDBDatabase | null> {
           db.createObjectStore(STORE_NAME, { keyPath: 'slot' });
         }
       };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => {
-        persistent = false;
-        resolve(null);
+      request.onsuccess = () => {
+        // A blocked request can succeed later; keep the selected memory backend.
+        if (storageStatus === 'temporary') {
+          request.result.close();
+          return;
+        }
+        storageStatus = 'persistent';
+        resolve(request.result);
       };
-      request.onblocked = () => {
-        persistent = false;
-        resolve(null);
-      };
+      request.onerror = fallback;
+      request.onblocked = fallback;
     });
   }
   return dbPromise;
@@ -67,8 +69,17 @@ function metaFor(slot: string, save: GameSave): SaveMeta {
   };
 }
 
+export function getStorageStatus(): StorageStatus {
+  return storageStatus;
+}
+
+export async function initializeStorage(): Promise<StorageStatus> {
+  await openDb();
+  return storageStatus;
+}
+
 export function isPersistentStorage(): boolean {
-  return persistent;
+  return storageStatus === 'persistent';
 }
 
 export function slotLabel(slot: string): string {

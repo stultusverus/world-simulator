@@ -91,7 +91,10 @@ versioned schema; incompatible saves are refused with a message. Loading restore
 world, people, relationships, wars, RNG state and chronicle, then continues the
 simulation deterministically.
 
-Autosave can be resumed from the creation screen after a reload.
+Autosave can be resumed from the creation screen after a reload when IndexedDB is
+available. If browser storage is unavailable, blocked, or fails to open, saves use
+temporary memory. The Saves menu and save notifications warn that these saves are
+lost when the page is reloaded or closed.
 
 ## Tech notes
 

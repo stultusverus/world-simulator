@@ -3,11 +3,14 @@ import {
   MANUAL_SLOTS,
   deleteSlot,
   isPersistentStorage,
+  initializeStorage,
+  getStorageStatus,
   listSaves,
   readFromSlot,
   saveToSlot,
   slotLabel,
 } from '../persist/storage';
+import type { StorageStatus } from '../persist/storage';
 import type { GameSave, SaveMeta } from '../sim/save-types';
 import { escapeHtml, formatNumber, formatYear, qs } from './dom';
 
@@ -43,7 +46,7 @@ export class SaveMenu {
           <button type="button" class="panel-close" id="saves-close" aria-label="Close saves">×</button>
         </div>
         <p class="modal-lead">Autosave runs every thirty seconds. Three manual slots are yours to keep.</p>
-        <div class="storage-note hidden" id="storage-note">This browser does not allow persistent storage. Saves will last only for this session.</div>
+        <div class="storage-note" id="storage-note" role="status">Checking save storage…</div>
         <div class="save-slots" id="save-slots"></div>
         <div class="save-status" id="save-status"></div>
       </div>
@@ -62,9 +65,16 @@ export class SaveMenu {
       if (!slot || !action) return;
       void this.handleAction(slot, action);
     });
-    if (!isPersistentStorage()) {
-      qs<HTMLElement>(this.root, '#storage-note').classList.remove('hidden');
-    }
+    this.updateStorageStatus(getStorageStatus());
+    void initializeStorage().then((status) => this.updateStorageStatus(status));
+  }
+
+  private updateStorageStatus(status: StorageStatus): void {
+    const note = qs<HTMLElement>(this.root, '#storage-note');
+    note.classList.toggle('hidden', status === 'persistent');
+    note.textContent = status === 'pending'
+      ? 'Checking save storage…'
+      : 'Persistent storage is unavailable. Saves are temporary and will be lost when this page is reloaded or closed.';
   }
 
   async show(): Promise<void> {
@@ -150,7 +160,12 @@ export class SaveMenu {
         }
         this.setBusy(true);
         const meta = await saveToSlot(slot, game.toSave());
-        this.callbacks.onToast(`Saved ${slotLabel(slot)} at year ${meta.year}.`, 'good');
+        this.callbacks.onToast(
+          isPersistentStorage()
+            ? `Saved ${slotLabel(slot)} at year ${meta.year}.`
+            : `Temporarily saved ${slotLabel(slot)} at year ${meta.year}. This save will be lost when this page is reloaded or closed.`,
+          isPersistentStorage() ? 'good' : 'info',
+        );
         await this.refresh();
       } else if (action === 'load') {
         this.setBusy(true);

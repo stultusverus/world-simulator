@@ -5,6 +5,7 @@ import {
   MAX_AGENTS_SUPPORTED,
   MAX_ANIMALS_SUPPORTED,
   MAX_FACTIONS,
+  SAVE_VERSION,
   SETTLEMENT_TIERS,
   WILDLIFE_CAP,
   settlementTier,
@@ -33,6 +34,7 @@ import { runWar } from './war';
 import { runDiplomacy } from './diplomacy';
 import { runProgress } from './progress';
 import { runEnvironment } from './environment';
+import type { GameSave } from './save-types';
 
 export interface GameOptions {
   size: number;
@@ -87,7 +89,58 @@ export class Game {
   terrainDirty: number[] = [];
   ownershipDirty = true;
 
-  constructor(options: GameOptions) {
+  constructor(options: GameOptions, save?: GameSave) {
+    if (save) {
+      this.world = {
+        size: save.world.size,
+        seedText: save.world.seedText,
+        seed: save.world.seed,
+        tick: save.world.tick,
+        elevation: save.world.elevation.slice(),
+        moisture: save.world.moisture.slice(),
+        terrain: save.world.terrain.slice(),
+        fertility: save.world.fertility.slice(),
+        river: save.world.river.slice(),
+        owner: save.world.owner.slice(),
+        waterDistance: save.world.waterDistance.slice(),
+        spawnSites: save.world.spawnSites.map((site) => ({ ...site })),
+        landTiles: save.world.landTiles,
+        waterTiles: save.world.waterTiles,
+        terrainVersion: 1,
+        ownerVersion: 1,
+      };
+      this.startWithFactions = save.startWithFactions;
+      this.agentCap = AGENT_CAP[save.size] ?? 1200;
+      this.wildlifeCap = WILDLIFE_CAP[save.size] ?? 150;
+      this.agents = AgentPool.fromSnapshot(save.agents);
+      this.animals = AnimalPool.fromSnapshot(save.animals);
+      this.rng = new RNG(0);
+      this.rng.setState(save.rngState);
+      this.worldName = makeWorldName(save.seedText);
+      this.civs = save.civs.map((civ) => ({ ...civ, traits: [...civ.traits] }));
+      this.buildings = save.buildings.map((building) => ({ ...building }));
+      for (const building of this.buildings) {
+        this.buildingById.set(building.id, building);
+        this.buildingAt.set(building.y * this.world.size + building.x, building);
+      }
+      this.wars = save.wars.map((war) => ({ ...war }));
+      this.relations.set(save.relations);
+      this.chronicle.entries = save.chronicle.map((entry) => ({ ...entry }));
+      this.nextBuildingId = save.nextBuildingId;
+      this.nextWarId = save.nextWarId;
+      this.speed = save.speed;
+      for (const [id, path] of save.soldierPaths) {
+        this.soldierPaths.set(id, {
+          path: path.path.map((point) => ({ ...point })),
+          index: path.index,
+          targetKey: path.targetKey,
+        });
+      }
+      this.ownershipDirty = false;
+      this.updateStats();
+      this.refreshOwnership();
+      return;
+    }
     this.world = generateWorld(options.size, options.seedText);
     this.startWithFactions = options.startWithFactions;
     this.agentCap = AGENT_CAP[options.size] ?? 1200;
@@ -100,6 +153,58 @@ export class Game {
     this.seedWorld();
     this.updateStats();
     this.refreshOwnership();
+  }
+
+  static fromSave(save: GameSave): Game {
+    return new Game(
+      { size: save.size, seedText: save.seedText, startWithFactions: save.startWithFactions },
+      save,
+    );
+  }
+
+  toSave(savedAt = Date.now()): GameSave {
+    return {
+      version: SAVE_VERSION,
+      savedAt,
+      size: this.world.size,
+      seedText: this.world.seedText,
+      startWithFactions: this.startWithFactions,
+      speed: this.speed,
+      rngState: this.rng.getState(),
+      nextBuildingId: this.nextBuildingId,
+      nextWarId: this.nextWarId,
+      world: {
+        size: this.world.size,
+        seedText: this.world.seedText,
+        seed: this.world.seed,
+        tick: this.world.tick,
+        elevation: this.world.elevation.slice(),
+        moisture: this.world.moisture.slice(),
+        terrain: this.world.terrain.slice(),
+        fertility: this.world.fertility.slice(),
+        river: this.world.river.slice(),
+        owner: this.world.owner.slice(),
+        waterDistance: this.world.waterDistance.slice(),
+        spawnSites: this.world.spawnSites.map((site) => ({ ...site })),
+        landTiles: this.world.landTiles,
+        waterTiles: this.world.waterTiles,
+      },
+      civs: this.civs.map((civ) => ({ ...civ, traits: [...civ.traits] })),
+      buildings: this.buildings.map((building) => ({ ...building })),
+      wars: this.wars.map((war) => ({ ...war })),
+      relations: this.relations.slice(),
+      agents: this.agents.toSnapshot(),
+      animals: this.animals.toSnapshot(),
+      chronicle: this.chronicle.entries.map((entry) => ({ ...entry })),
+      soldierPaths: [...this.soldierPaths.entries()].map(([id, path]) => [
+        id,
+        {
+          path: path.path.map((point) => ({ ...point })),
+          index: path.index,
+          targetKey: path.targetKey,
+        },
+      ]),
+    };
   }
 
   get year(): number {

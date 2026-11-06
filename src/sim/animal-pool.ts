@@ -3,6 +3,22 @@ export enum AnimalKind {
   Wolf = 1,
 }
 
+export interface AnimalPoolSnapshot {
+  capacity: number;
+  count: number;
+  x: Float32Array;
+  y: Float32Array;
+  kind: Uint8Array;
+  age: Uint16Array;
+  lifespan: Uint16Array;
+  health: Float32Array;
+  alive: Uint8Array;
+  targetX: Float32Array;
+  targetY: Float32Array;
+  free: Uint32Array;
+  freeCount: number;
+}
+
 export interface AnimalSpawnOptions {
   x: number;
   y: number;
@@ -65,5 +81,40 @@ export class AnimalPool {
     this.alive[id] = 0;
     this.count -= 1;
     this.free[this.freeCount++] = id;
+  }
+
+  toSnapshot(): AnimalPoolSnapshot {
+    return {
+      capacity: this.capacity,
+      count: this.count,
+      x: this.x.slice(),
+      y: this.y.slice(),
+      kind: this.kind.slice(),
+      age: this.age.slice(),
+      lifespan: this.lifespan.slice(),
+      health: this.health.slice(),
+      alive: this.alive.slice(),
+      targetX: this.targetX.slice(),
+      targetY: this.targetY.slice(),
+      free: this.free.slice(),
+      freeCount: this.freeCount,
+    };
+  }
+
+  static fromSnapshot(snapshot: AnimalPoolSnapshot): AnimalPool {
+    const pool = new AnimalPool(snapshot.capacity);
+    pool.count = snapshot.count;
+    pool.x.set(snapshot.x);
+    pool.y.set(snapshot.y);
+    pool.kind.set(snapshot.kind);
+    pool.age.set(snapshot.age);
+    pool.lifespan.set(snapshot.lifespan);
+    pool.health.set(snapshot.health);
+    pool.alive.set(snapshot.alive);
+    pool.targetX.set(snapshot.targetX);
+    pool.targetY.set(snapshot.targetY);
+    pool.free.set(snapshot.free);
+    pool.freeCount = snapshot.freeCount;
+    return pool;
   }
 }

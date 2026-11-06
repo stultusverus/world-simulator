@@ -1,5 +1,32 @@
 import { NO_AGENT, NO_BUILDING } from '../world/types';
 
+export interface AgentPoolSnapshot {
+  capacity: number;
+  count: number;
+  x: Float32Array;
+  y: Float32Array;
+  civ: Uint8Array;
+  job: Uint8Array;
+  state: Uint8Array;
+  age: Uint16Array;
+  lifespan: Uint16Array;
+  health: Float32Array;
+  hunger: Float32Array;
+  happiness: Float32Array;
+  faith: Float32Array;
+  home: Uint16Array;
+  work: Uint16Array;
+  partner: Uint32Array;
+  mother: Uint32Array;
+  father: Uint32Array;
+  alive: Uint8Array;
+  gender: Uint8Array;
+  targetX: Float32Array;
+  targetY: Float32Array;
+  free: Uint32Array;
+  freeCount: number;
+}
+
 export interface AgentSpawnOptions {
   x: number;
   y: number;
@@ -130,5 +157,62 @@ export class AgentPool {
 
   isAlive(id: number): boolean {
     return id >= 0 && id < this.capacity && this.alive[id] === 1;
+  }
+
+  toSnapshot(): AgentPoolSnapshot {
+    return {
+      capacity: this.capacity,
+      count: this.count,
+      x: this.x.slice(),
+      y: this.y.slice(),
+      civ: this.civ.slice(),
+      job: this.job.slice(),
+      state: this.state.slice(),
+      age: this.age.slice(),
+      lifespan: this.lifespan.slice(),
+      health: this.health.slice(),
+      hunger: this.hunger.slice(),
+      happiness: this.happiness.slice(),
+      faith: this.faith.slice(),
+      home: this.home.slice(),
+      work: this.work.slice(),
+      partner: this.partner.slice(),
+      mother: this.mother.slice(),
+      father: this.father.slice(),
+      alive: this.alive.slice(),
+      gender: this.gender.slice(),
+      targetX: this.targetX.slice(),
+      targetY: this.targetY.slice(),
+      free: this.free.slice(),
+      freeCount: this.freeCount,
+    };
+  }
+
+  static fromSnapshot(snapshot: AgentPoolSnapshot): AgentPool {
+    const pool = new AgentPool(snapshot.capacity);
+    pool.count = snapshot.count;
+    pool.x.set(snapshot.x);
+    pool.y.set(snapshot.y);
+    pool.civ.set(snapshot.civ);
+    pool.job.set(snapshot.job);
+    pool.state.set(snapshot.state);
+    pool.age.set(snapshot.age);
+    pool.lifespan.set(snapshot.lifespan);
+    pool.health.set(snapshot.health);
+    pool.hunger.set(snapshot.hunger);
+    pool.happiness.set(snapshot.happiness);
+    pool.faith.set(snapshot.faith);
+    pool.home.set(snapshot.home);
+    pool.work.set(snapshot.work);
+    pool.partner.set(snapshot.partner);
+    pool.mother.set(snapshot.mother);
+    pool.father.set(snapshot.father);
+    pool.alive.set(snapshot.alive);
+    pool.gender.set(snapshot.gender);
+    pool.targetX.set(snapshot.targetX);
+    pool.targetY.set(snapshot.targetY);
+    pool.free.set(snapshot.free);
+    pool.freeCount = snapshot.freeCount;
+    return pool;
   }
 }

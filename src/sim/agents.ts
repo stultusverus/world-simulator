@@ -110,6 +110,13 @@ export function assignJobs(game: Game): void {
       soldiers.push(...take(wantSoldiers - soldiers.length, () => true));
     }
 
+    // Reserve minimum construction labour before farms consume the civilian pool.
+    // Keep the last available adult farming when there is a completed farm.
+    const wantBuilders = unbuilt ? Math.min(4, Math.max(1, Math.floor(adults.length * 0.3))) : 0;
+    const reserveBuilder = wantBuilders > 0 && adults.length - used.size > (farms.length > 0 ? 1 : 0);
+    let builders = take(reserveBuilder ? 1 : 0, (id) => agents.job[id] === Job.Builder);
+    if (reserveBuilder && builders.length === 0) builders = take(1, () => true);
+
     const wantFarmers = Math.min(
       adults.length,
       farms.length * BUILDING_DEFS[BuildingType.Farm].workers,
@@ -137,8 +144,7 @@ export function assignJobs(game: Game): void {
       priests = priests.concat(take(wantPriests - priests.length, () => true));
     }
 
-    const wantBuilders = unbuilt ? Math.min(4, Math.max(1, Math.floor(adults.length * 0.3))) : 0;
-    let builders = take(wantBuilders, (id) => agents.job[id] === Job.Builder);
+    builders = builders.concat(take(wantBuilders - builders.length, (id) => agents.job[id] === Job.Builder));
     if (builders.length < wantBuilders) {
       builders = builders.concat(take(wantBuilders - builders.length, () => true));
     }

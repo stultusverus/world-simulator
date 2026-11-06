@@ -451,7 +451,6 @@ class WorldsmithApp {
   private installGame(game: Game): void {
     this.game = game;
     game.paused = false;
-    game.speed = 1;
     this.selection = null;
     this.hoverSelection = null;
     this.hoverTile = null;

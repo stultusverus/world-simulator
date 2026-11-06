@@ -1,6 +1,6 @@
 import './styles.css';
 import { AUTOSAVE_INTERVAL_MS, MAX_CATCHUP_TICKS, ticksForSpeed } from './config';
-import { AUTOSAVE_SLOT, readFromSlot, saveToSlot } from './persist/storage';
+import { AUTOSAVE_SLOT, isPersistentStorage, readFromSlot, saveToSlot } from './persist/storage';
 import { Renderer, type PowerEffect, type RenderOverlay } from './render/renderer';
 import { Game } from './sim/game';
 import { applyPower, type PowerId } from './sim/powers';
@@ -89,6 +89,7 @@ class WorldsmithApp {
   private lastAutosave = 0;
   private lastPick = 0;
   private autosaveWarned = false;
+  private temporaryAutosaveWarned = false;
   private fps = 0;
   private frameCount = 0;
   private fpsAt = 0;
@@ -527,6 +528,10 @@ class WorldsmithApp {
     if (!this.game) return;
     try {
       await saveToSlot(AUTOSAVE_SLOT, this.game.toSave());
+      if (!isPersistentStorage() && !this.temporaryAutosaveWarned) {
+        this.temporaryAutosaveWarned = true;
+        this.hud.toast('Autosave is temporary and will be lost when this page is reloaded or closed.', 'info');
+      }
     } catch (error) {
       console.warn('[worldsmith] autosave failed', error);
       if (!this.autosaveWarned) {

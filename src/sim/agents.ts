@@ -123,7 +123,10 @@ export function assignJobs(game: Game): void {
       adults.length,
       workshops.length * BUILDING_DEFS[BuildingType.Workshop].workers,
     );
-    const workers = take(wantWorkers, (id) => agents.job[id] === Job.Worker);
+    let workers = take(wantWorkers, (id) => agents.job[id] === Job.Worker);
+    if (workers.length < wantWorkers) {
+      workers = workers.concat(take(wantWorkers - workers.length, () => true));
+    }
 
     const wantPriests = Math.min(
       adults.length,

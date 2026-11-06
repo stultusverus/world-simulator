@@ -130,21 +130,9 @@ src/
 npm run dev        # Vite dev server on http://127.0.0.1:5173 (all interfaces)
 npm run build      # tsc --noEmit && vite build
 npm run preview    # preview the production build
-npm run deploy     # build, then deploy to Cloudflare Workers
 npm test           # Vitest: generation, simulation, powers, pathfinding, saves
 npm run typecheck  # strict TypeScript
 ```
-
-## Deploy
-
-The production build is a fully static site (`dist/`), so any static host works.
-`wrangler.jsonc` configures Cloudflare Workers to serve `dist/` as static assets.
-
-**Cloudflare Workers (static assets)** — build command `npm run build`, deploy command
-`npx wrangler deploy` (or run `npm run deploy` locally after `npx wrangler login`).
-
-**Cloudflare Pages** — framework preset none, build command `npm run build`, build
-output directory `dist`. No server code, functions or environment variables are needed.
 
 ## Current limits (deliberately deferred)
 

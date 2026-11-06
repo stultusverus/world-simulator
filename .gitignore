@@ -5,8 +5,3 @@ dist/
 .DS_Store
 browser-screenshots/
 test-results/
-
-# Cloudflare / Wrangler local state
-.wrangler/
-.dev.vars*
-!.dev.vars.example

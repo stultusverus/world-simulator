@@ -44,9 +44,10 @@ export enum Job {
   Builder = 2,
   Priest = 3,
   Soldier = 4,
+  Worker = 5,
 }
 
-export const JOB_NAMES: readonly string[] = ['Forager', 'Farmer', 'Builder', 'Priest', 'Soldier'];
+export const JOB_NAMES: readonly string[] = ['Forager', 'Farmer', 'Builder', 'Priest', 'Soldier', 'Worker'];
 
 export const IDLE = 0;
 export const NO_OWNER = 255;
@@ -137,6 +138,11 @@ export interface Civ {
   buildings: number;
   happiness: number;
   casualties: number;
+  foodShortage: number;
+  foodProduction: number;
+  foodNeed: number;
+  maxPopulation: number;
+  lastFamineTick: number;
   warId: number;
   eraChangedTick: number;
 }
@@ -164,7 +170,8 @@ export interface War {
   casualtiesA: number;
   casualtiesB: number;
   lastBattleTick: number;
-  entryIndex: number;
+  battleActive: boolean;
+  battleDeaths: number;
   battleX: number;
   battleY: number;
 }

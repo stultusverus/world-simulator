@@ -81,7 +81,11 @@ export function countLandAround(world: World, cx: number, cy: number, radius: nu
 }
 
 /** Rebuilds the faction influence/owner map from all standing buildings. */
-export function recomputeOwnership(world: World, buildings: readonly { civ: number; x: number; y: number; built: boolean; type: number }[], radius: number): void {
+export function recomputeOwnership(
+  world: World,
+  buildings: readonly { civ: number; x: number; y: number; built: boolean; type: number }[],
+  radiusForCiv: (civ: number) => number,
+): void {
   world.owner.fill(NO_OWNER);
   // Town centers are stamped first so they always own their tile.
   const ordered = [...buildings].filter((b) => b.built).sort((a, b) => {
@@ -89,7 +93,8 @@ export function recomputeOwnership(world: World, buildings: readonly { civ: numb
     return a.civ - b.civ;
   });
   for (const building of ordered) {
-    const r = building.type === 0 ? radius : Math.max(2, radius - 2);
+    const civRadius = radiusForCiv(building.civ);
+    const r = building.type === 0 ? civRadius : Math.max(2, civRadius - 2);
     const r2 = r * r;
     for (let dy = -r; dy <= r; dy += 1) {
       for (let dx = -r; dx <= r; dx += 1) {

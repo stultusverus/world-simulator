@@ -1,0 +1,354 @@
+import {
+  AGENT_CAP,
+  BUILDING_DEFS,
+  DEFAULT_STARTING_FACTIONS,
+  MAX_AGENTS_SUPPORTED,
+  MAX_ANIMALS_SUPPORTED,
+  MAX_FACTIONS,
+  SETTLEMENT_TIERS,
+  WILDLIFE_CAP,
+  settlementTier,
+} from '../config';
+import { RNG, mixSeed } from '../core/rng';
+import { generateWorld } from '../world/generate';
+import { isWalkableAt, randomLandTile, recomputeOwnership } from '../world/world';
+import {
+  NO_BUILDING,
+  type Building,
+  type ChronicleKind,
+  type Civ,
+  type SpawnSite,
+  type War,
+  type World,
+  type WorldStats,
+} from '../world/types';
+import { AgentPool } from './agent-pool';
+import { AnimalKind, AnimalPool } from './animal-pool';
+import { Chronicle } from './chronicle';
+import { makeWorldName } from './names';
+import { foundFaction } from './faction';
+import { assignJobs, runAgentLives } from './agents';
+import { runEconomy } from './economy';
+import { runWar } from './war';
+import { runDiplomacy } from './diplomacy';
+import { runProgress } from './progress';
+import { runEnvironment } from './environment';
+
+export interface GameOptions {
+  size: number;
+  seedText: string;
+  startWithFactions: boolean;
+}
+
+export interface PathPoint {
+  x: number;
+  y: number;
+}
+
+export interface SoldierPath {
+  path: PathPoint[];
+  index: number;
+  targetKey: number;
+}
+
+export interface SpawnAgentOptions {
+  age: number;
+  gender: number;
+  lifespan?: number;
+  home?: number;
+  job?: number;
+  health?: number;
+  mother?: number;
+  father?: number;
+}
+
+export class Game {
+  world: World;
+  civs: Civ[] = [];
+  buildings: Building[] = [];
+  buildingById = new Map<number, Building>();
+  buildingAt = new Map<number, Building>();
+  agents: AgentPool;
+  animals: AnimalPool;
+  relations = new Float32Array(MAX_FACTIONS * MAX_FACTIONS);
+  wars: War[] = [];
+  chronicle = new Chronicle();
+  rng: RNG;
+  speed = 1;
+  paused = false;
+  startWithFactions: boolean;
+  nextBuildingId = 1;
+  nextWarId = 1;
+  agentCap: number;
+  wildlifeCap: number;
+  worldName: string;
+  stats: WorldStats = { population: 0, factions: 0, wars: 0, animals: 0, buildings: 0, maxEra: 0 };
+  soldierPaths = new Map<number, SoldierPath>();
+  terrainDirty: number[] = [];
+  ownershipDirty = true;
+
+  constructor(options: GameOptions) {
+    this.world = generateWorld(options.size, options.seedText);
+    this.startWithFactions = options.startWithFactions;
+    this.agentCap = AGENT_CAP[options.size] ?? 1200;
+    this.wildlifeCap = WILDLIFE_CAP[options.size] ?? 150;
+    this.agents = new AgentPool(MAX_AGENTS_SUPPORTED);
+    this.animals = new AnimalPool(MAX_ANIMALS_SUPPORTED);
+    this.rng = new RNG(mixSeed(this.world.seed, 0xc0ffee));
+    this.worldName = makeWorldName(options.seedText);
+    this.chronicle.add(this.world.tick, 'nature', `The world of ${this.worldName} takes shape.`);
+    this.seedWorld();
+    this.updateStats();
+    this.refreshOwnership();
+  }
+
+  get year(): number {
+    return this.world.tick;
+  }
+
+  aliveCivs(): Civ[] {
+    return this.civs.filter((civ) => civ.alive);
+  }
+
+  getCiv(id: number): Civ | undefined {
+    return this.civs[id];
+  }
+
+  addChronicle(kind: ChronicleKind, text: string, civ?: number, x?: number, y?: number): void {
+    this.chronicle.add(this.world.tick, kind, text, civ, x, y);
+  }
+
+  private seedWorld(): void {
+    const count = this.startWithFactions
+      ? Math.min(DEFAULT_STARTING_FACTIONS, this.world.spawnSites.length)
+      : 0;
+    for (let i = 0; i < count; i += 1) {
+      const site = this.world.spawnSites[i];
+      foundFaction(this, site.x, site.y, { initial: true });
+    }
+    if (!this.startWithFactions) {
+      this.chronicle.add(this.world.tick, 'nature', 'The land lies empty, waiting for its first people.');
+    }
+    this.seedWildlife();
+  }
+
+  private seedWildlife(): void {
+    const deerTarget = Math.max(8, Math.floor(this.wildlifeCap * 0.3));
+    const wolfTarget = Math.max(2, Math.floor(this.wildlifeCap * 0.08));
+    for (let i = 0; i < deerTarget; i += 1) {
+      const spot = randomLandTile(this.world, this.rng);
+      if (spot) this.spawnAnimal(AnimalKind.Deer, spot.x, spot.y);
+    }
+    for (let i = 0; i < wolfTarget; i += 1) {
+      const spot = randomLandTile(this.world, this.rng);
+      if (spot) this.spawnAnimal(AnimalKind.Wolf, spot.x, spot.y);
+    }
+  }
+
+  spawnAnimal(kind: AnimalKind, x: number, y: number): number {
+    if (this.animals.count >= this.wildlifeCap) return -1;
+    if (!isWalkableAt(this.world, x, y)) return -1;
+    return this.animals.spawn({ x, y, kind });
+  }
+
+  spawnAgent(civId: number, x: number, y: number, opts: SpawnAgentOptions): number {
+    if (this.agents.count >= this.agentCap) return -1;
+    const lifespan = opts.lifespan ?? 90 + this.rng.int(0, 45);
+    return this.agents.spawn({
+      x,
+      y,
+      civId,
+      age: opts.age,
+      gender: opts.gender,
+      lifespan,
+      home: opts.home ?? NO_BUILDING,
+      job: opts.job ?? 0,
+      health: opts.health ?? 82,
+      mother: opts.mother,
+      father: opts.father,
+    });
+  }
+
+  removeAgent(id: number): void {
+    this.agents.kill(id);
+    this.soldierPaths.delete(id);
+  }
+
+  addBuilding(civId: number, type: Building['type'], x: number, y: number, built: boolean): Building {
+    const def = BUILDING_DEFS[type];
+    const building: Building = {
+      id: this.nextBuildingId++,
+      civ: civId,
+      type,
+      x,
+      y,
+      hp: built ? def.maxHp : Math.round(def.maxHp * 0.35),
+      maxHp: def.maxHp,
+      work: built ? def.work : 0,
+      workNeeded: def.work,
+      built,
+      workers: 0,
+      flash: 0,
+    };
+    this.buildings.push(building);
+    this.buildingById.set(building.id, building);
+    this.buildingAt.set(y * this.world.size + x, building);
+    this.ownershipDirty = true;
+    return building;
+  }
+
+  removeBuilding(building: Building): void {
+    const i = this.buildings.indexOf(building);
+    if (i >= 0) this.buildings.splice(i, 1);
+    this.buildingById.delete(building.id);
+    this.buildingAt.delete(building.y * this.world.size + building.x);
+    for (let id = 0; id < this.agents.capacity; id += 1) {
+      if (this.agents.alive[id] === 0) continue;
+      if (this.agents.home[id] === building.id) this.agents.home[id] = NO_BUILDING;
+      if (this.agents.work[id] === building.id) this.agents.work[id] = NO_BUILDING;
+    }
+    this.ownershipDirty = true;
+  }
+
+  /** Finds an unoccupied, walkable tile for a new building. */
+  findBuildingSpot(
+    civ: Civ,
+    type: Building['type'],
+    minRadius = 2,
+    maxRadius?: number,
+  ): SpawnSite | null {
+    const maxR = maxRadius ?? SETTLEMENT_TIERS[settlementTier(civ.population)].radius;
+    const preferFertility = type === 2; // Farm
+    let best: SpawnSite | null = null;
+    let bestScore = -1;
+    const attempts = preferFertility ? 100 : 70;
+    for (let i = 0; i < attempts; i += 1) {
+      const angle = this.rng.next() * Math.PI * 2;
+      const radius = minRadius + this.rng.next() * Math.max(1, maxR - minRadius);
+      const x = Math.round(civ.centerX + Math.cos(angle) * radius);
+      const y = Math.round(civ.centerY + Math.sin(angle) * radius);
+      if (!isWalkableAt(this.world, x, y)) continue;
+      const index = y * this.world.size + x;
+      if (this.buildingAt.has(index)) continue;
+      if (preferFertility) {
+        const score = this.world.fertility[index];
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x, y };
+          if (score >= 205) break;
+        }
+      } else {
+        return { x, y };
+      }
+    }
+    if (preferFertility && best) return best;
+    if (!preferFertility) {
+      // Fall back to any walkable spot close to the center.
+      for (let r = 2; r <= maxR + 2; r += 1) {
+        for (let dy = -r; dy <= r; dy += 1) {
+          for (let dx = -r; dx <= r; dx += 1) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const x = Math.round(civ.centerX + dx);
+            const y = Math.round(civ.centerY + dy);
+            if (!isWalkableAt(this.world, x, y)) continue;
+            const index = y * this.world.size + x;
+            if (this.buildingAt.has(index)) continue;
+            return { x, y };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  markTerrainChanged(index: number): void {
+    this.world.terrainVersion += 1;
+    this.terrainDirty.push(index);
+  }
+
+  refreshOwnership(): void {
+    const radii = new Map<number, number>();
+    for (const civ of this.civs) {
+      if (!civ.alive) continue;
+      radii.set(civ.id, SETTLEMENT_TIERS[settlementTier(civ.population)].radius);
+    }
+    recomputeOwnership(this.world, this.buildings, (civId) => radii.get(civId) ?? 4);
+    this.ownershipDirty = false;
+  }
+
+  /** Civ whose territory contains the tile, else the nearest center within range. */
+  civNear(x: number, y: number, radius = 12): Civ | null {
+    if (x >= 0 && y >= 0 && x < this.world.size && y < this.world.size) {
+      const owner = this.world.owner[y * this.world.size + x];
+      if (owner !== 255 && this.civs[owner]?.alive) return this.civs[owner];
+    }
+    let best: Civ | null = null;
+    let bestDistance = radius;
+    for (const civ of this.civs) {
+      if (!civ.alive) continue;
+      const distance = Math.hypot(civ.centerX - x, civ.centerY - y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = civ;
+      }
+    }
+    return best;
+  }
+
+  updateStats(): void {
+    for (const civ of this.civs) {
+      civ.population = 0;
+      civ.soldiers = 0;
+      civ.buildings = 0;
+      civ.housing = 0;
+    }
+    let population = 0;
+    const agents = this.agents;
+    for (let id = 0; id < agents.capacity; id += 1) {
+      if (agents.alive[id] === 0) continue;
+      population += 1;
+      const civ = this.civs[agents.civ[id]];
+      if (!civ) continue;
+      civ.population += 1;
+      if (agents.job[id] === 4) civ.soldiers += 1;
+    }
+    let buildingCount = 0;
+    for (const building of this.buildings) {
+      const civ = this.civs[building.civ];
+      if (!civ) continue;
+      if (building.built) {
+        buildingCount += 1;
+        civ.buildings += 1;
+        civ.housing += BUILDING_DEFS[building.type].housing;
+      }
+    }
+    let aliveFactions = 0;
+    let maxEra = 0;
+    for (const civ of this.civs) {
+      if (!civ.alive) continue;
+      aliveFactions += 1;
+      maxEra = Math.max(maxEra, civ.era);
+    }
+    this.stats = {
+      population,
+      factions: aliveFactions,
+      wars: this.wars.length,
+      animals: this.animals.count,
+      buildings: buildingCount,
+      maxEra,
+    };
+  }
+
+  tick(): void {
+    this.world.tick += 1;
+    assignJobs(this);
+    runEconomy(this);
+    runAgentLives(this);
+    runWar(this);
+    runDiplomacy(this);
+    runProgress(this);
+    runEnvironment(this);
+    this.updateStats();
+    if (this.ownershipDirty || this.world.tick % 4 === 0) this.refreshOwnership();
+  }
+}

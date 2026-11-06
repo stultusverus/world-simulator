@@ -1,0 +1,77 @@
+import { MAX_FACTIONS } from '../config';
+import type { Civ } from '../world/types';
+import type { Game } from './game';
+import { startWar } from './war';
+
+function hasBarracks(game: Game, civ: Civ): boolean {
+  return game.buildings.some(
+    (building) => building.civ === civ.id && building.built && building.type === 5,
+  );
+}
+
+function clampRelation(value: number): number {
+  return Math.max(-100, Math.min(100, value));
+}
+
+export function runDiplomacy(game: Game): void {
+  const alive = game.aliveCivs();
+  const tick = game.world.tick;
+  for (let i = 0; i < alive.length; i += 1) {
+    for (let j = i + 1; j < alive.length; j += 1) {
+      const a = alive[i];
+      const b = alive[j];
+      if (a.warId >= 0 || b.warId >= 0) continue;
+      const index = a.id * MAX_FACTIONS + b.id;
+      const previous = game.relations[index];
+      let relation = previous;
+
+      relation += (0 - relation) * 0.004;
+      if (a.religionOf === b.religionOf) relation += 0.05;
+      if (a.traits.includes('mercantile') || b.traits.includes('mercantile')) relation += 0.02;
+
+      if (game.rng.chance(0.008)) {
+        const drop = game.rng.range(6, 18);
+        relation -= drop;
+        if (previous > -25 && relation <= -25) {
+          game.addChronicle(
+            'diplomacy',
+            `Tensions flare between ${a.name} and ${b.name}.`,
+            a.id,
+            Math.round((a.centerX + b.centerX) / 2),
+            Math.round((a.centerY + b.centerY) / 2),
+          );
+        }
+      }
+
+      relation = clampRelation(relation);
+      game.relations[index] = relation;
+      game.relations[b.id * MAX_FACTIONS + a.id] = relation;
+
+      if (
+        tick > 14 &&
+        a.cooldownUntil <= tick &&
+        b.cooldownUntil <= tick &&
+        a.population >= 8 &&
+        b.population >= 8 &&
+        a.soldiers >= 1 &&
+        b.soldiers >= 1 &&
+        a.food > 4 &&
+        b.food > 4 &&
+        hasBarracks(game, a) &&
+        hasBarracks(game, b)
+      ) {
+        const militarist = a.traits.includes('militarist') || b.traits.includes('militarist');
+        const threshold = militarist ? -28 : -34;
+        if (relation < threshold) {
+          const aggression =
+            (a.traits.includes('militarist') ? 1.8 : 1) *
+            (b.traits.includes('militarist') ? 1.8 : 1) *
+            (a.traits.includes('mercantile') || b.traits.includes('mercantile') ? 0.7 : 1);
+          if (game.rng.chance(0.02 * aggression)) {
+            startWar(game, a.id, b.id);
+          }
+        }
+      }
+    }
+  }
+}

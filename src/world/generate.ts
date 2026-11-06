@@ -217,7 +217,7 @@ export function generateWorld(size: number, seedText: string): World {
     size,
     seedText,
     seed,
-    tick: 0,
+    tick: 1,
     elevation,
     moisture,
     terrain,

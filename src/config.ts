@@ -41,9 +41,9 @@ export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const SAVE_CHRONICLE_LIMIT = 300;
 export const CHRONICLE_LIMIT = 600;
 
-export const FOOD_PER_PERSON = 0.85;
-export const STARVATION_HEALTH_LOSS = 18;
-export const BIRTH_BASE_CHANCE = 0.13;
+export const FOOD_PER_PERSON = 0.6;
+export const STARVATION_HEALTH_LOSS = 10;
+export const BIRTH_BASE_CHANCE = 0.16;
 export const SOLDIER_UPKEEP_WEALTH = 0.25;
 
 export const SEA_LEVEL = 0.44;
@@ -60,10 +60,10 @@ export const COLORS = [
 ] as const;
 
 export const SETTLEMENT_TIERS = [
-  { name: 'Camp', minPop: 0, radius: 4, maxBuildings: 5 },
-  { name: 'Village', minPop: 10, radius: 6, maxBuildings: 10 },
-  { name: 'Town', minPop: 30, radius: 8, maxBuildings: 16 },
-  { name: 'City', minPop: 80, radius: 11, maxBuildings: 24 },
+  { name: 'Camp', minPop: 0, radius: 4, maxBuildings: 8 },
+  { name: 'Village', minPop: 10, radius: 6, maxBuildings: 16 },
+  { name: 'Town', minPop: 30, radius: 8, maxBuildings: 30 },
+  { name: 'City', minPop: 80, radius: 11, maxBuildings: 40 },
 ] as const;
 
 export function settlementTier(population: number): number {
@@ -113,7 +113,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     description: 'The heart of a faction. If it falls, the faction falls with it.',
     cost: 0,
     work: 0,
-    maxHp: 320,
+    maxHp: 700,
     workers: 0,
     housing: 4,
     era: Era.Hearth,
@@ -130,7 +130,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     work: 10,
     maxHp: 80,
     workers: 0,
-    housing: 3,
+    housing: 4,
     era: Era.Hearth,
     armySlots: 0,
     faith: 0,
@@ -149,7 +149,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     era: Era.Hearth,
     armySlots: 0,
     faith: 0,
-    produces: { food: 3.4 },
+    produces: { food: 6.2 },
   },
   [BuildingType.Workshop]: {
     type: BuildingType.Workshop,

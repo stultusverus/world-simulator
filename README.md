@@ -140,6 +140,10 @@ npm run typecheck  # strict TypeScript
 The production build is a fully static site (`dist/`), so any static host works.
 `wrangler.jsonc` configures Cloudflare Workers to serve `dist/` as static assets.
 
+The game header displays the short Git commit hash and UTC build time, embedded by
+Vite when building (or starting the dev server). Builds without Git metadata display
+`unknown` for the commit. The timestamp records the build, not deployment.
+
 **Cloudflare Workers (static assets)** — build command `npm run build`, deploy command
 `npx wrangler deploy` (or run `npm run deploy` locally after `npx wrangler login`).
 

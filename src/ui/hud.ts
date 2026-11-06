@@ -1,4 +1,3 @@
-import { version } from '../../package.json';
 import {
   BUILDING_DEFS,
   COLORS,
@@ -152,7 +151,7 @@ export class Hud {
 
     this.root.innerHTML = `
       <header class="topbar">
-        <div class="brand"><span class="brand-mark">◇</span><span>Worldsmith <span class="game-version">v${escapeHtml(version)}</span></span></div>
+        <div class="brand"><span class="brand-mark">◇</span><span>Worldsmith <span class="game-version">${escapeHtml(__COMMIT_HASH__)} · built ${escapeHtml(__BUILD_DATE__)}</span></span></div>
         <div class="world-meta">
           <span class="world-name" id="world-name">The Unnamed World</span>
           <span class="world-year" id="year-label">Year 1</span>

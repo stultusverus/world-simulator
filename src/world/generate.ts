@@ -70,31 +70,37 @@ function carveRivers(
   sea: number,
 ): void {
   const rng = new RNG(mixSeed(seed, GEN_SALT.rivers));
-  const wanted = Math.max(3, Math.round(size / 110));
+  const wanted = 6 + Math.floor(size / 256) * 3 + Math.floor(size / 512) * 2;
   const marked: number[] = [];
+  const sources: number[] = [];
+  for (let i = 0; i < elevation.length; i += 1) {
+    if (elevation[i] >= sea + 28 && isWalkable(terrain[i])) sources.push(i);
+  }
+  if (sources.length === 0) return;
 
   for (let r = 0; r < wanted; r += 1) {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const sx = rng.int(4, size - 5);
-      const sy = rng.int(4, size - 5);
-      const si = sy * size + sx;
-      if (elevation[si] < sea + 48) continue;
-      if (!isWalkable(terrain[si])) continue;
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const si = sources[rng.int(0, sources.length - 1)];
+      const sx = si % size;
+      const sy = (si / size) | 0;
       if (river[si] === 1) continue;
+      if (sx < 2 || sy < 2 || sx >= size - 2 || sy >= size - 2) continue;
 
       const path: number[] = [];
+      const visited = new Set<number>();
       let x = sx;
       let y = sy;
-      for (let step = 0; step < size * 2; step += 1) {
+      let steps = 0;
+
+      while (steps < 500) {
         const i = y * size + x;
-        if (river[i] === 1) break;
-        if (!isWalkable(terrain[i])) break;
+        if (river[i] === 1 || visited.has(i) || !isWalkable(terrain[i])) break;
+        visited.add(i);
         path.push(i);
         if (elevation[i] < sea) break;
+
         let best = -1;
         let bestElevation = elevation[i];
-        let bestX = x;
-        let bestY = y;
         for (let dy = -1; dy <= 1; dy += 1) {
           for (let dx = -1; dx <= 1; dx += 1) {
             if (dx === 0 && dy === 0) continue;
@@ -102,27 +108,64 @@ function carveRivers(
             const ny = y + dy;
             if (nx < 1 || ny < 1 || nx >= size - 1 || ny >= size - 1) continue;
             const ni = ny * size + nx;
-            if (river[ni] === 1) continue;
+            if (river[ni] === 1 || visited.has(ni)) continue;
+            if (!isWalkable(terrain[ni])) continue;
             if (elevation[ni] < bestElevation) {
               bestElevation = elevation[ni];
               best = ni;
-              bestX = nx;
-              bestY = ny;
             }
           }
         }
-        if (best < 0) break;
-        x = bestX;
-        y = bestY;
-        if (elevation[best] < sea) {
-          break;
+
+        if (best < 0) {
+          // Local minimum: look a little further for a lower outlet, then cut to it.
+          let escape = -1;
+          let escapeElevation = elevation[i];
+          const radius = 7;
+          for (let dy = -radius; dy <= radius; dy += 1) {
+            for (let dx = -radius; dx <= radius; dx += 1) {
+              if (dx * dx + dy * dy > radius * radius) continue;
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 1 || ny < 1 || nx >= size - 1 || ny >= size - 1) continue;
+              const ni = ny * size + nx;
+              if (river[ni] === 1 || visited.has(ni) || !isWalkable(terrain[ni])) continue;
+              if (elevation[ni] < escapeElevation) {
+                escapeElevation = elevation[ni];
+                escape = ni;
+              }
+            }
+          }
+          if (escape < 0) break;
+          const ex = escape % size;
+          const ey = (escape / size) | 0;
+          let cx = x;
+          let cy = y;
+          while (cx !== ex || cy !== ey) {
+            cx += Math.sign(ex - cx);
+            cy += Math.sign(ey - cy);
+            const ci = cy * size + cx;
+            if (!visited.has(ci) && isWalkable(terrain[ci])) {
+              visited.add(ci);
+              path.push(ci);
+            }
+          }
+          x = ex;
+          y = ey;
+          steps += 1;
+          continue;
         }
+
+        x = best % size;
+        y = (best / size) | 0;
+        steps += 1;
       }
 
-      if (path.length >= 12) {
+      if (path.length >= 10) {
         for (const i of path) {
           const t = terrain[i] as Tile;
           if (t === Tile.Sand || t === Tile.Mountain || t === Tile.Snow) continue;
+          if (river[i] === 1) continue;
           river[i] = 1;
           marked.push(i);
         }
@@ -131,7 +174,7 @@ function carveRivers(
     }
   }
 
-  // Keep rivers from swallowing mountains: clear any accidental high-altitude marks.
+  // Keep rivers from swallowing mountain peaks.
   for (const i of marked) {
     if (elevation[i] > sea + 170) river[i] = 0;
   }

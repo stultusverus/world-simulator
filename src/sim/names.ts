@@ -57,13 +57,17 @@ export function makeWorldName(seedText: string): string {
 
 export function makeFactionName(seedText: string, index: number, used: ReadonlySet<string>): string {
   const rng = new RNG(hashString(`${seedText}:faction:${index}`));
-  let base = `${rng.pick(FACTION_PREFIX)}${rng.pick(FACTION_SUFFIX)}`;
+  const prefix = rng.pick(FACTION_PREFIX);
+  let suffix = rng.pick(FACTION_SUFFIX);
+  const needsSpace = /[aeiou]$/i.test(prefix) && /^[aeiou]/i.test(suffix);
+  if (needsSpace) suffix = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+  let base = needsSpace ? `${prefix} ${suffix}` : `${prefix}${suffix}`;
   base = base.charAt(0).toUpperCase() + base.slice(1);
   let name = base;
-  let suffix = 2;
+  let ordinal = 2;
   while (used.has(name)) {
-    name = `${base} ${suffix}`;
-    suffix += 1;
+    name = `${base} ${ordinal}`;
+    ordinal += 1;
   }
   return name;
 }

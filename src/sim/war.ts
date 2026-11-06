@@ -1,4 +1,3 @@
-import { BUILDING_DEFS } from '../config';
 import { AgentState, BuildingType, Job, type Building, type Civ, type War } from '../world/types';
 import { findPath } from './pathfind';
 import type { Game } from './game';
@@ -22,6 +21,8 @@ export function startWar(game: Game, aId: number, bId: number): War | null {
     startTick: game.world.tick,
     casualtiesA: 0,
     casualtiesB: 0,
+    razedA: 0,
+    razedB: 0,
     lastBattleTick: -100,
     battleActive: false,
     battleDeaths: 0,
@@ -67,10 +68,12 @@ export function endWar(game: Game, war: War, reason: WarEndReason): void {
   }
 
   if (a && b) {
+    const razed = war.razedA + war.razedB;
+    const razedText = razed > 0 ? ` ${razed} buildings lie in ruin.` : '';
     if (reason === 'blessing') {
-      game.addChronicle('diplomacy', `A divine calm ends the war between ${a.name} and ${b.name}.`, a.id, war.battleX, war.battleY);
+      game.addChronicle('diplomacy', `A divine calm ends the war between ${a.name} and ${b.name}.${razedText}`, a.id, war.battleX, war.battleY);
     } else if (reason === 'peace') {
-      game.addChronicle('diplomacy', `Peace is made between ${a.name} and ${b.name}.`, a.id, war.battleX, war.battleY);
+      game.addChronicle('diplomacy', `Peace is made between ${a.name} and ${b.name}.${razedText}`, a.id, war.battleX, war.battleY);
     }
   }
 }
@@ -186,11 +189,11 @@ function act(
   const distanceToBuilding = Math.hypot(targetX - x, targetY - y);
   if (distanceToBuilding <= SIEGE_RANGE) {
     agents.state[id] = AgentState.Fighting;
-    target.hp -= 5.5 * soldierPower(attacker) * game.rng.range(0.8, 1.2);
+    target.hp -= 3.5 * soldierPower(attacker) * game.rng.range(0.8, 1.2);
     target.flash = 1;
     recordBattle(game, war, x, y);
     if (target.hp <= 0) {
-      destroyBuilding(game, attacker, defender, target);
+      destroyBuilding(game, war, attacker, defender, target);
     }
     return;
   }
@@ -286,20 +289,33 @@ function killSoldier(game: Game, war: War, civ: Civ, id: number): void {
 
 function destroyBuilding(
   game: Game,
+  war: War,
   attacker: Civ,
   defender: Civ,
   building: Building,
 ): void {
-  const def = BUILDING_DEFS[building.type];
   game.removeBuilding(building);
   attacker.food += 8;
-  game.addChronicle(
-    'war',
-    `${attacker.name} raze a ${def.name} of ${defender.name}.`,
-    attacker.id,
-    building.x,
-    building.y,
-  );
+  const attackerIsA = war.a === attacker.id;
+  if (attackerIsA) war.razedA += 1;
+  else war.razedB += 1;
+  if (building.type === BuildingType.TownCenter) {
+    game.addChronicle(
+      'war',
+      `${attacker.name} raze the Town Center of ${defender.name}.`,
+      attacker.id,
+      building.x,
+      building.y,
+    );
+  } else if ((attackerIsA ? war.razedA : war.razedB) === 1) {
+    game.addChronicle(
+      'war',
+      `${attacker.name} begin razing the settlements of ${defender.name}.`,
+      attacker.id,
+      building.x,
+      building.y,
+    );
+  }
   const remaining = game.buildings.filter((b) => b.civ === defender.id);
   if (building.type === BuildingType.TownCenter || remaining.length === 0) {
     eliminateCiv(game, defender);

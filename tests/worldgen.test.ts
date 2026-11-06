@@ -27,6 +27,8 @@ describe('world generation', () => {
       expect(fraction, `land fraction for ${seed}`).toBeGreaterThan(0.2);
       expect(fraction, `land fraction for ${seed}`).toBeLessThan(0.7);
       expect(world.spawnSites.length, `spawn sites for ${seed}`).toBeGreaterThanOrEqual(3);
+      const riverTiles = world.river.reduce((sum, value) => sum + value, 0);
+      expect(riverTiles, `rivers for ${seed}`).toBeGreaterThan(0);
       expect(world.terrain.some((t) => isWater(t))).toBe(true);
     }
   });

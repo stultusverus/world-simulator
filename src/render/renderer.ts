@@ -109,6 +109,7 @@ export class Renderer {
       this.drawAnimals(game, timeMs);
       this.drawAgents(game, timeMs);
     }
+    this.drawCapitalMarkers(game);
     if (this.camera.zoom >= 11) this.drawLabels(game);
     this.drawDayNight(timeMs);
     this.drawOverlay(game, overlay, timeMs);
@@ -149,12 +150,57 @@ export class Renderer {
         const sy = Math.floor(sprite / 8) * 16;
         ctx.drawImage(this.atlas.tiles, sx, sy, 16, 16, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         if (world.river[index] === 1) {
-          const variant = (index & 3) % 4;
-          ctx.drawImage(this.atlas.rivers, variant * 16, 0, 16, 16, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          this.drawRiverChannel(ctx, world, x, y, tx * TILE_SIZE, ty * TILE_SIZE);
         }
       }
     }
     return { canvas, ctx };
+  }
+
+  private drawRiverChannel(
+    ctx: CanvasRenderingContext2D,
+    world: World,
+    x: number,
+    y: number,
+    baseX: number,
+    baseY: number,
+  ): void {
+    const size = world.size;
+    const bank = '#2b5f79';
+    const water = RIVER_COLOR;
+    const highlight = '#8fc3d4';
+    const isRiver = (dx: number, dy: number): boolean => {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) return false;
+      return world.river[ny * size + nx] === 1;
+    };
+    const band = (bx: number, by: number, bw: number, bh: number): void => {
+      ctx.fillStyle = bank;
+      ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = water;
+      ctx.fillRect(bx, by, bw, bh);
+    };
+    // Arms to orthogonal neighbours.
+    if (isRiver(0, -1)) band(baseX + 5, baseY, 6, 8);
+    if (isRiver(0, 1)) band(baseX + 5, baseY + 8, 6, 8);
+    if (isRiver(-1, 0)) band(baseX, baseY + 5, 8, 6);
+    if (isRiver(1, 0)) band(baseX + 8, baseY + 5, 8, 6);
+    // Bridge diagonal neighbours so rivers never break into dashes.
+    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+      if (!isRiver(dx, dy)) continue;
+      const bx = dx < 0 ? baseX : baseX + 8;
+      const by = dy < 0 ? baseY : baseY + 8;
+      ctx.fillStyle = bank;
+      ctx.fillRect(bx, by, 8, 8);
+      ctx.fillStyle = water;
+      ctx.fillRect(bx + 1, by + 1, 6, 6);
+    }
+    // Central pool.
+    band(baseX + 4, baseY + 4, 8, 8);
+    ctx.fillStyle = highlight;
+    ctx.fillRect(baseX + 6, baseY + 5, 3, 1);
+    ctx.fillRect(baseX + 5, baseY + 6, 1, 2);
   }
 
   private drawChunks(game: Game): void {
@@ -246,6 +292,55 @@ export class Renderer {
     const size = world.size * this.camera.zoom;
     this.ctx.imageSmoothingEnabled = false;
     this.ctx.drawImage(this.ownerCanvas, screen.x, screen.y, size, size);
+    if (this.camera.zoom >= 6) this.drawTerritoryBorders(game);
+  }
+
+  private drawTerritoryBorders(game: Game): void {
+    const world = game.world;
+    const size = world.size;
+    const bounds = this.camera.visibleBounds();
+    const x0 = Math.max(0, Math.floor(bounds.left));
+    const y0 = Math.max(0, Math.floor(bounds.top));
+    const x1 = Math.min(size - 1, Math.ceil(bounds.right));
+    const y1 = Math.min(size - 1, Math.ceil(bounds.bottom));
+    const zoom = this.camera.zoom;
+    const ctx = this.ctx;
+    ctx.lineWidth = Math.max(1, Math.min(3, zoom * 0.04));
+    ctx.globalAlpha = 0.8;
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        const index = y * size + x;
+        const owner = world.owner[index];
+        if (owner === 255) continue;
+        const west = x > 0 ? world.owner[index - 1] : 255;
+        const east = x < size - 1 ? world.owner[index + 1] : 255;
+        const north = y > 0 ? world.owner[index - size] : 255;
+        const south = y < size - 1 ? world.owner[index + size] : 255;
+        if (west === owner && east === owner && north === owner && south === owner) continue;
+        const civ = game.civs[owner];
+        ctx.strokeStyle = civ ? COLORS[civ.color] ?? COLORS[0] : '#e6edf3';
+        const screen = this.camera.worldToScreen(x, y);
+        ctx.beginPath();
+        if (west !== owner) {
+          ctx.moveTo(screen.x, screen.y);
+          ctx.lineTo(screen.x, screen.y + zoom);
+        }
+        if (east !== owner) {
+          ctx.moveTo(screen.x + zoom, screen.y);
+          ctx.lineTo(screen.x + zoom, screen.y + zoom);
+        }
+        if (north !== owner) {
+          ctx.moveTo(screen.x, screen.y);
+          ctx.lineTo(screen.x + zoom, screen.y);
+        }
+        if (south !== owner) {
+          ctx.moveTo(screen.x, screen.y + zoom);
+          ctx.lineTo(screen.x + zoom, screen.y + zoom);
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   private buildOwnership(game: Game): void {
@@ -266,16 +361,11 @@ export class Renderer {
         const owner = world.owner[i];
         if (owner === 255) continue;
         const color = colors[owner] ?? [255, 255, 255];
-        const left = x > 0 ? world.owner[i - 1] : 255;
-        const right = x < size - 1 ? world.owner[i + 1] : 255;
-        const up = y > 0 ? world.owner[i - size] : 255;
-        const down = y < size - 1 ? world.owner[i + size] : 255;
-        const border = left !== owner || right !== owner || up !== owner || down !== owner;
         const offset = i * 4;
         data[offset] = color[0];
         data[offset + 1] = color[1];
         data[offset + 2] = color[2];
-        data[offset + 3] = border ? 205 : 54;
+        data[offset + 3] = 42;
       }
     }
     ctx.putImageData(image, 0, 0);
@@ -426,6 +516,27 @@ export class Renderer {
         width,
         height,
       );
+    }
+  }
+
+  private drawCapitalMarkers(game: Game): void {
+    const ctx = this.ctx;
+    for (const civ of game.civs) {
+      if (!civ.alive) continue;
+      const screen = this.camera.worldToScreen(civ.centerX + 0.5, civ.centerY + 0.5);
+      if (screen.x < -20 || screen.y < -20 || screen.x > this.width + 20 || screen.y > this.height + 20) {
+        continue;
+      }
+      const color = COLORS[civ.color] ?? COLORS[0];
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y - this.camera.zoom * 1.2, Math.max(3, this.camera.zoom * 0.22), 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(238, 242, 244, 0.8)';
+      ctx.stroke();
     }
   }
 

@@ -29,8 +29,8 @@ export function runDiplomacy(game: Game): void {
       if (a.religionOf === b.religionOf) relation += 0.05;
       if (a.traits.includes('mercantile') || b.traits.includes('mercantile')) relation += 0.02;
 
-      if (game.rng.chance(0.008)) {
-        const drop = game.rng.range(6, 18);
+      if (game.rng.chance(0.012)) {
+        const drop = game.rng.range(8, 22);
         relation -= drop;
         if (previous > -25 && relation <= -25) {
           game.addChronicle(
@@ -61,13 +61,13 @@ export function runDiplomacy(game: Game): void {
         hasBarracks(game, b)
       ) {
         const militarist = a.traits.includes('militarist') || b.traits.includes('militarist');
-        const threshold = militarist ? -28 : -34;
+        const threshold = militarist ? -26 : -32;
         if (relation < threshold) {
           const aggression =
             (a.traits.includes('militarist') ? 1.8 : 1) *
             (b.traits.includes('militarist') ? 1.8 : 1) *
             (a.traits.includes('mercantile') || b.traits.includes('mercantile') ? 0.7 : 1);
-          if (game.rng.chance(0.02 * aggression)) {
+          if (game.rng.chance(0.03 * aggression)) {
             startWar(game, a.id, b.id);
           }
         }

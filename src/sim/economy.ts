@@ -167,11 +167,11 @@ function planConstruction(game: Game, civ: Civ): void {
 
 function chooseBuildingType(civ: Civ, built: readonly Building[]): BuildingType | null {
   const foodRatio = civ.foodProduction / Math.max(1, civ.foodNeed);
-  if (civ.housing - civ.population <= 2) return BuildingType.House;
-  if (foodRatio < 1.25 && builtCount(built, BuildingType.Farm) < 9) return BuildingType.Farm;
-  if (builtCount(built, BuildingType.Barracks) === 0 && civ.population >= 8) {
+  if (foodRatio < 1.15 && builtCount(built, BuildingType.Farm) < 9) return BuildingType.Farm;
+  if (builtCount(built, BuildingType.Barracks) === 0 && civ.population >= 10) {
     return BuildingType.Barracks;
   }
+  if (civ.housing - civ.population <= 2) return BuildingType.House;
   if (civ.era >= 1 && builtCount(built, BuildingType.Workshop) < 1 + Math.floor(civ.population / 40)) {
     return BuildingType.Workshop;
   }

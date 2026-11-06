@@ -3,8 +3,8 @@ import { BuildingType, Job, Tile } from '../world/types';
 import { COLORS } from '../config';
 
 export const TERRAIN_COLORS: readonly string[] = [
-  '#123449',
-  '#1d5669',
+  '#10313f',
+  '#236272',
   '#d6bd85',
   '#4f7a3a',
   '#2f5a2c',
@@ -71,35 +71,40 @@ function drawTile(ctx: CanvasRenderingContext2D, type: Tile, variant: number): v
     }
     if (rng.chance(0.35)) px(ctx, rng.int(0, 12), rng.int(0, 12), 2, 1, '#ead4a3');
   } else if (type === Tile.Grass) {
-    for (let i = 0; i < 5; i += 1) {
+    px(ctx, 0, 0, 16, 16, shade(base, (variant - 1) * 3));
+    for (let i = 0; i < 7; i += 1) {
       const x = rng.int(0, 14);
       const y = rng.int(2, 14);
-      px(ctx, x, y, 1, 2, shade(base, 14));
+      px(ctx, x, y, 1, 2, shade(base, 16));
     }
-    for (let i = 0; i < 3; i += 1) {
-      px(ctx, rng.int(0, 15), rng.int(0, 15), 1, 1, shade(base, -12));
+    for (let i = 0; i < 4; i += 1) {
+      px(ctx, rng.int(0, 15), rng.int(0, 15), 1, 1, shade(base, -14));
     }
-    if (rng.chance(0.1)) px(ctx, rng.int(1, 13), rng.int(1, 13), 1, 1, '#edc948');
+    if (variant === 2) px(ctx, rng.int(2, 10), rng.int(4, 10), 3, 2, shade(base, -8));
+    if (rng.chance(0.14)) px(ctx, rng.int(1, 13), rng.int(1, 13), 1, 1, '#edc948');
+    if (rng.chance(0.08)) px(ctx, rng.int(1, 12), rng.int(1, 12), 2, 1, '#8a6a45');
   } else if (type === Tile.Forest) {
     px(ctx, 0, 0, 16, 16, shade(base, 4));
-    for (let i = 0; i < 3; i += 1) {
-      px(ctx, rng.int(0, 15), rng.int(0, 15), 1, 1, '#5d8a44');
+    for (let i = 0; i < 5; i += 1) {
+      px(ctx, rng.int(0, 15), rng.int(0, 15), 1, 1, rng.chance(0.5) ? '#5d8a44' : '#24491f');
     }
     const trees = [
-      { x: 1, y: 3 },
-      { x: 8, y: 1 },
-      { x: 10, y: 8 },
-      { x: 2, y: 10 },
+      { x: 0, y: 2 },
+      { x: 8, y: 0 },
+      { x: 9, y: 8 },
+      { x: 1, y: 9 },
     ];
     for (let i = 0; i < 2; i += 1) {
-      const tree = trees[variant % 3 + i] ?? trees[i];
+      const tree = trees[(variant + i * 2) % trees.length];
       const ox = tree.x;
       const oy = tree.y;
-      px(ctx, ox + 3, oy + 6, 2, 4, '#5a3f27');
-      px(ctx, ox + 1, oy + 1, 6, 6, '#24491f');
-      px(ctx, ox + 2, oy, 4, 5, '#3a6b33');
-      px(ctx, ox + 3, oy + 1, 2, 2, '#4f7a3a');
+      px(ctx, ox + 3, oy + 7, 2, 5, '#5a3f27');
+      px(ctx, ox, oy + 2, 8, 7, '#24491f');
+      px(ctx, ox + 1, oy + 1, 6, 6, '#3a6b33');
+      px(ctx, ox + 2, oy + 1, 4, 3, '#4f7a3a');
+      px(ctx, ox + 3, oy + 2, 2, 1, '#649a52');
     }
+    if (variant === 3) px(ctx, 12, 12, 2, 2, '#7a7956');
   } else if (type === Tile.Hills) {
     for (let i = 0; i < 3; i += 1) {
       const x = rng.int(0, 8);
@@ -135,22 +140,21 @@ function drawTile(ctx: CanvasRenderingContext2D, type: Tile, variant: number): v
 function drawRiver(ctx: CanvasRenderingContext2D, variant: number): void {
   const horizontal = variant % 2 === 0;
   const water = RIVER_COLOR;
-  const dirty = shade(water, -20);
+  const deep = shade(water, -22);
   const highlight = '#7ab4c9';
-  const wobble = variant * 2;
   if (horizontal) {
+    px(ctx, 0, 4, 16, 8, deep);
+    px(ctx, 0, 5, 16, 6, water);
+    px(ctx, 0, 6, 16, 1, highlight);
     for (let x = 0; x < 16; x += 1) {
-      const top = 5 + ((x + wobble) % 3 === 0 ? 1 : 0);
-      px(ctx, x, top, 1, 6, dirty);
-      px(ctx, x, top + 1, 1, 4, water);
-      if (x % 5 === 1) px(ctx, x, top + 2, 1, 1, highlight);
+      if ((x + variant) % 6 === 0) px(ctx, x, 5, 2, 1, '#a9d0da');
     }
   } else {
+    px(ctx, 4, 0, 8, 16, deep);
+    px(ctx, 5, 0, 6, 16, water);
+    px(ctx, 6, 0, 1, 16, highlight);
     for (let y = 0; y < 16; y += 1) {
-      const left = 5 + ((y + wobble) % 3 === 0 ? 1 : 0);
-      px(ctx, left, y, 6, 1, dirty);
-      px(ctx, left + 1, y, 4, 1, water);
-      if (y % 5 === 1) px(ctx, left + 2, y, 1, 1, highlight);
+      if ((y + variant) % 6 === 0) px(ctx, 5, y, 1, 2, '#a9d0da');
     }
   }
 }

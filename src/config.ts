@@ -36,7 +36,7 @@ export const MAX_CATCHUP_TICKS = 6;
 /** Year at which the world begins. */
 export const START_YEAR = 1;
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const SAVE_CHRONICLE_LIMIT = 300;
 export const CHRONICLE_LIMIT = 600;
@@ -61,9 +61,9 @@ export const COLORS = [
 
 export const SETTLEMENT_TIERS = [
   { name: 'Camp', minPop: 0, radius: 4, maxBuildings: 8 },
-  { name: 'Village', minPop: 10, radius: 6, maxBuildings: 16 },
-  { name: 'Town', minPop: 30, radius: 8, maxBuildings: 30 },
-  { name: 'City', minPop: 80, radius: 11, maxBuildings: 40 },
+  { name: 'Village', minPop: 10, radius: 6, maxBuildings: 18 },
+  { name: 'Town', minPop: 30, radius: 8, maxBuildings: 32 },
+  { name: 'City', minPop: 80, radius: 11, maxBuildings: 46 },
 ] as const;
 
 export function settlementTier(population: number): number {
@@ -113,9 +113,9 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     description: 'The heart of a faction. If it falls, the faction falls with it.',
     cost: 0,
     work: 0,
-    maxHp: 700,
+    maxHp: 2400,
     workers: 0,
-    housing: 4,
+    housing: 6,
     era: Era.Hearth,
     armySlots: 0,
     faith: 4,
@@ -130,7 +130,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     work: 10,
     maxHp: 80,
     workers: 0,
-    housing: 4,
+    housing: 6,
     era: Era.Hearth,
     armySlots: 0,
     faith: 0,

@@ -169,6 +169,8 @@ export interface War {
   startTick: number;
   casualtiesA: number;
   casualtiesB: number;
+  razedA: number;
+  razedB: number;
   lastBattleTick: number;
   battleActive: boolean;
   battleDeaths: number;

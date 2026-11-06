@@ -18,8 +18,12 @@ code.
 ```bash
 npm install
 npm run dev
-# open http://127.0.0.1:5173/
+# open http://127.0.0.1:5173/ — or http://<container-ip>:5173/
 ```
+
+The dev server binds `0.0.0.0`, so loopback and the container/network IP both work.
+To restrict it to localhost again, set `server.host` to `'127.0.0.1'` in `vite.config.ts`
+(or start it once with `npm run dev -- --host 127.0.0.1`).
 
 Create a world from the opening screen: choose a seed, a size (256², 512² or 1024²),
 and whether to begin with three factions plus wildlife or an empty wilderness.
@@ -123,7 +127,7 @@ src/
 ## Scripts
 
 ```bash
-npm run dev        # Vite dev server on http://127.0.0.1:5173
+npm run dev        # Vite dev server on http://127.0.0.1:5173 (all interfaces)
 npm run build      # tsc --noEmit && vite build
 npm run preview    # preview the production build
 npm test           # Vitest: generation, simulation, powers, pathfinding, saves

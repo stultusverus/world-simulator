@@ -1,6 +1,8 @@
 import { CHUNK_TILES, COLORS, TILE_SIZE } from '../config';
 import { AgentState, BuildingType, Job, NO_BUILDING, type World } from '../world/types';
+import { isWaterAt } from '../world/world';
 import type { Game } from '../sim/game';
+import { settlementCenters, settlementName } from '../sim/settlements';
 import { Camera } from './camera';
 import { RIVER_COLOR, SpriteAtlas, TERRAIN_COLORS, createSpriteAtlas } from './sprites';
 
@@ -470,6 +472,19 @@ export class Renderer {
         agents.state[id] === AgentState.Fighting ||
         agents.state[id] === AgentState.Returning;
       const bob = Math.sin(timeMs / (moving ? 120 : 620) + id * 1.7) * (moving ? 1.4 : 0.7);
+      if (isWaterAt(game.world, Math.floor(x), Math.floor(y))) {
+        // Simple procedural hull while a soldier is at sea.
+        ctx.fillStyle = 'rgba(12, 30, 42, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y + zoom * 0.12, zoom * 0.92, zoom * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#6b4c32';
+        ctx.beginPath();
+        ctx.ellipse(screen.x, screen.y + zoom * 0.1, zoom * 0.62, zoom * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#c9a46a';
+        ctx.fillRect(screen.x - zoom * 0.045, screen.y - zoom * 0.6, zoom * 0.09, zoom * 0.7);
+      }
       ctx.drawImage(
         this.atlas.units,
         civ.color * 16,
@@ -523,20 +538,29 @@ export class Renderer {
     const ctx = this.ctx;
     for (const civ of game.civs) {
       if (!civ.alive) continue;
-      const screen = this.camera.worldToScreen(civ.centerX + 0.5, civ.centerY + 0.5);
-      if (screen.x < -20 || screen.y < -20 || screen.x > this.width + 20 || screen.y > this.height + 20) {
-        continue;
+      for (const center of settlementCenters(game, civ.id)) {
+        const screen = this.camera.worldToScreen(center.x + 0.5, center.y + 0.5);
+        if (screen.x < -20 || screen.y < -20 || screen.x > this.width + 20 || screen.y > this.height + 20) {
+          continue;
+        }
+        const capital = center.x === civ.centerX && center.y === civ.centerY;
+        const color = COLORS[civ.color] ?? COLORS[0];
+        ctx.beginPath();
+        ctx.arc(
+          screen.x,
+          screen.y - this.camera.zoom * 1.2,
+          Math.max(capital ? 3 : 2, this.camera.zoom * (capital ? 0.22 : 0.15)),
+          0,
+          Math.PI * 2,
+        );
+        ctx.fillStyle = color;
+        ctx.globalAlpha = capital ? 0.9 : 0.6;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(238, 242, 244, 0.8)';
+        ctx.stroke();
       }
-      const color = COLORS[civ.color] ?? COLORS[0];
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y - this.camera.zoom * 1.2, Math.max(3, this.camera.zoom * 0.22), 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.9;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(238, 242, 244, 0.8)';
-      ctx.stroke();
     }
   }
 
@@ -544,21 +568,28 @@ export class Renderer {
     const ctx = this.ctx;
     ctx.textAlign = 'center';
     ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+    const showMinorLabels = this.camera.zoom >= 10;
     for (const civ of game.civs) {
       if (!civ.alive) continue;
-      const screen = this.camera.worldToScreen(civ.centerX + 0.5, civ.centerY + 0.5);
-      if (screen.x < -100 || screen.y < -60 || screen.x > this.width + 100 || screen.y > this.height + 100) {
-        continue;
+      for (const center of settlementCenters(game, civ.id)) {
+        const capital = center.x === civ.centerX && center.y === civ.centerY;
+        if (!capital && !showMinorLabels) continue;
+        const screen = this.camera.worldToScreen(center.x + 0.5, center.y + 0.5);
+        if (screen.x < -100 || screen.y < -60 || screen.x > this.width + 100 || screen.y > this.height + 100) {
+          continue;
+        }
+        const label = capital
+          ? `${civ.name} · ${civ.population}`
+          : settlementName(game, civ.id, center);
+        const width = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(8, 14, 20, 0.66)';
+        ctx.fillRect(screen.x - width / 2 - 4, screen.y - this.camera.zoom * 2.9, width + 8, 16);
+        ctx.strokeStyle = COLORS[civ.color];
+        ctx.lineWidth = 1;
+        ctx.strokeRect(screen.x - width / 2 - 4, screen.y - this.camera.zoom * 2.9, width + 8, 16);
+        ctx.fillStyle = '#eef2f4';
+        ctx.fillText(label, screen.x, screen.y - this.camera.zoom * 2.9 + 12);
       }
-      const label = `${civ.name} · ${civ.population}`;
-      const width = ctx.measureText(label).width;
-      ctx.fillStyle = 'rgba(8, 14, 20, 0.66)';
-      ctx.fillRect(screen.x - width / 2 - 4, screen.y - this.camera.zoom * 2.9, width + 8, 16);
-      ctx.strokeStyle = COLORS[civ.color];
-      ctx.lineWidth = 1;
-      ctx.strokeRect(screen.x - width / 2 - 4, screen.y - this.camera.zoom * 2.9, width + 8, 16);
-      ctx.fillStyle = '#eef2f4';
-      ctx.fillText(label, screen.x, screen.y - this.camera.zoom * 2.9 + 12);
     }
   }
 

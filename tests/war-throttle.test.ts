@@ -17,6 +17,7 @@ function twoSoldierFixture() {
     if (game.agents.alive[id]) game.removeAgent(id);
   }
   game.world.terrain.fill(Tile.Grass);
+  game.refreshReachability();
   const target = game.addBuilding(1, BuildingType.TownCenter, 30, 10, true);
   const soldiers = [10.5, 11.5].map((x) => {
     const id = game.spawnAgent(0, x, 10.5, { age: 25, gender: 0 });
@@ -25,10 +26,11 @@ function twoSoldierFixture() {
     return id;
   });
   expect(startWar(game, 0, 1)).not.toBeNull();
-  // A full-height barrier makes the target unreachable.
+  // Mountains block both the land route and any naval crossing.
   for (let y = 0; y < game.world.size; y += 1) {
-    game.world.terrain[y * game.world.size + 20] = Tile.ShallowWater;
+    game.world.terrain[y * game.world.size + 20] = Tile.Mountain;
   }
+  game.refreshReachability();
   return { game, target, soldiers };
 }
 

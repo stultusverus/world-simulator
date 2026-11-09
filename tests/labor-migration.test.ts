@@ -89,4 +89,42 @@ describe('settlement labour', () => {
     const workers = BUILDING_DEFS[BuildingType.Farm].workers;
     expect(farmsIn(game, civ, satellite).every((farm) => farm.workers === workers)).toBe(true);
   });
+
+  it('spreads migrants across multiple empty settlements', () => {
+    const game = new Game({ size: 256, seedText: 'LABOR-SPREAD', startWithFactions: true });
+    const civ = game.civs[0];
+    const capital = settlementCenters(game, civ.id)[0];
+    expect(capital).toBeDefined();
+    const satellites: Building[] = [];
+    for (let i = 0; i < 2; i += 1) {
+      const spot = game.findBuildingSpot(civ, BuildingType.TownCenter, 4, 12);
+      expect(spot).not.toBeNull();
+      const center = game.addBuilding(civ.id, BuildingType.TownCenter, spot!.x, spot!.y, true);
+      for (let h = 0; h < 2; h += 1) {
+        const houseSpot = game.findBuildingSpot(civ, BuildingType.House, 2, 4, {
+          x: center.x,
+          y: center.y,
+        });
+        expect(houseSpot).not.toBeNull();
+        game.addBuilding(civ.id, BuildingType.House, houseSpot!.x, houseSpot!.y, true);
+      }
+      satellites.push(center);
+    }
+    for (let i = 0; i < 12; i += 1) {
+      const id = game.spawnAgent(civ.id, capital.x, capital.y, {
+        age: 25,
+        gender: i % 2,
+        home: capital.id,
+        job: Job.Idle,
+      });
+      expect(id).toBeGreaterThanOrEqual(0);
+    }
+
+    game.world.tick = 8;
+    runMigration(game);
+
+    for (const satellite of satellites) {
+      expect(settlementStats(game, civ.id, satellite).residents).toBeGreaterThan(0);
+    }
+  });
 });

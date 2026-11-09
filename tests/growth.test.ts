@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { SETTLEMENT_TIERS, settlementTier } from '../src/config';
+import {
+  FOOD_CAP,
+  KNOWLEDGE_CAP,
+  MATERIALS_CAP,
+  SETTLEMENT_TIERS,
+  WEALTH_CAP,
+  settlementTier,
+} from '../src/config';
+import { countCivJobs } from '../src/sim/agents';
 import { chooseBuildingType } from '../src/sim/economy';
 import { Game } from '../src/sim/game';
 import { BuildingType, type Building, type Civ } from '../src/world/types';
@@ -71,10 +79,11 @@ describe('building type scaling', () => {
     expect(chooseBuildingType(low, builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Farm]: 9 }))).toBeNull();
 
     const large = scaledCiv({ population: 300, foodNeed: 180, foodProduction: 10, housing: 2000 });
-    expect(chooseBuildingType(large, builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Farm]: 16 }))).toBe(
+    // Two barracks are the peace-time target at this population.
+    expect(chooseBuildingType(large, builtFrom({ [BuildingType.Barracks]: 2, [BuildingType.Farm]: 16 }))).toBe(
       BuildingType.Farm,
     );
-    expect(chooseBuildingType(large, builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Farm]: 17 }))).toBeNull();
+    expect(chooseBuildingType(large, builtFrom({ [BuildingType.Barracks]: 2, [BuildingType.Farm]: 17 }))).toBeNull();
   });
 
   it('scales workshop and temple targets with population and caps them', () => {
@@ -92,6 +101,17 @@ describe('building type scaling', () => {
     expect(chooseBuildingType(town, builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Workshop]: 3 }))).toBe(
       BuildingType.Temple,
     );
+    // Once the basics are covered the town turns to markets.
+    expect(
+      chooseBuildingType(
+        town,
+        builtFrom({
+          [BuildingType.Barracks]: 1,
+          [BuildingType.Workshop]: 3,
+          [BuildingType.Temple]: 2,
+        }),
+      ),
+    ).toBe(BuildingType.Market);
 
     const metropolis = scaledCiv({
       population: 450,
@@ -104,27 +124,50 @@ describe('building type scaling', () => {
     expect(
       chooseBuildingType(
         metropolis,
-        builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Workshop]: 7, [BuildingType.Farm]: 25 }),
+        builtFrom({ [BuildingType.Barracks]: 2, [BuildingType.Workshop]: 7, [BuildingType.Farm]: 25 }),
       ),
     ).toBe(BuildingType.Workshop);
     // Temple target at pop 450 is min(5, 1 + 4) = 5.
     expect(
       chooseBuildingType(
         metropolis,
-        builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Workshop]: 8, [BuildingType.Farm]: 25 }),
+        builtFrom({ [BuildingType.Barracks]: 2, [BuildingType.Workshop]: 8, [BuildingType.Farm]: 25 }),
       ),
     ).toBe(BuildingType.Temple);
     expect(
       chooseBuildingType(
         metropolis,
         builtFrom({
-          [BuildingType.Barracks]: 1,
+          [BuildingType.Barracks]: 2,
           [BuildingType.Workshop]: 8,
           [BuildingType.Temple]: 4,
           [BuildingType.Farm]: 25,
         }),
       ),
     ).toBe(BuildingType.Temple);
+    expect(
+      chooseBuildingType(
+        metropolis,
+        builtFrom({
+          [BuildingType.Barracks]: 2,
+          [BuildingType.Workshop]: 8,
+          [BuildingType.Temple]: 5,
+          [BuildingType.Farm]: 25,
+        }),
+      ),
+    ).toBe(BuildingType.Market);
+    expect(
+      chooseBuildingType(
+        metropolis,
+        builtFrom({
+          [BuildingType.Barracks]: 2,
+          [BuildingType.Workshop]: 8,
+          [BuildingType.Temple]: 5,
+          [BuildingType.Market]: 6,
+          [BuildingType.Farm]: 25,
+        }),
+      ),
+    ).toBeNull();
 
     const huge = scaledCiv({
       population: 600,
@@ -137,14 +180,14 @@ describe('building type scaling', () => {
     expect(
       chooseBuildingType(
         huge,
-        builtFrom({ [BuildingType.Barracks]: 1, [BuildingType.Workshop]: 8, [BuildingType.Farm]: 34 }),
+        builtFrom({ [BuildingType.Barracks]: 3, [BuildingType.Workshop]: 8, [BuildingType.Farm]: 34 }),
       ),
     ).toBe(BuildingType.Workshop);
     expect(
       chooseBuildingType(
         huge,
         builtFrom({
-          [BuildingType.Barracks]: 1,
+          [BuildingType.Barracks]: 3,
           [BuildingType.Workshop]: 9,
           [BuildingType.Temple]: 4,
           [BuildingType.Farm]: 34,
@@ -155,11 +198,59 @@ describe('building type scaling', () => {
       chooseBuildingType(
         huge,
         builtFrom({
-          [BuildingType.Barracks]: 2,
+          [BuildingType.Barracks]: 3,
           [BuildingType.Workshop]: 9,
           [BuildingType.Temple]: 5,
           [BuildingType.Farm]: 34,
         }),
+      ),
+    ).toBe(BuildingType.Market);
+    expect(
+      chooseBuildingType(
+        huge,
+        builtFrom({
+          [BuildingType.Barracks]: 3,
+          [BuildingType.Workshop]: 9,
+          [BuildingType.Temple]: 5,
+          [BuildingType.Market]: 8,
+          [BuildingType.Farm]: 34,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('unlocks universities and monuments in the later eras', () => {
+    const basics = {
+      [BuildingType.Barracks]: 3,
+      [BuildingType.Workshop]: 9,
+      [BuildingType.Temple]: 5,
+      [BuildingType.Market]: 8,
+      [BuildingType.Farm]: 34,
+    } as const;
+    const engine = scaledCiv({
+      population: 600,
+      foodNeed: 360,
+      foodProduction: 700,
+      housing: 4000,
+      era: 2,
+    });
+    expect(chooseBuildingType(engine, builtFrom(basics))).toBe(BuildingType.University);
+    expect(
+      chooseBuildingType(engine, builtFrom({ ...basics, [BuildingType.University]: 6 })),
+    ).toBeNull();
+
+    const zenith = { ...engine, era: 3 as const };
+    expect(chooseBuildingType(zenith, builtFrom(basics))).toBe(BuildingType.University);
+    expect(
+      chooseBuildingType(
+        zenith,
+        builtFrom({ ...basics, [BuildingType.University]: 6 }),
+      ),
+    ).toBe(BuildingType.Monument);
+    expect(
+      chooseBuildingType(
+        zenith,
+        builtFrom({ ...basics, [BuildingType.University]: 6, [BuildingType.Monument]: 3 }),
       ),
     ).toBeNull();
   });
@@ -206,6 +297,49 @@ describe('long-run growth', () => {
     const alive = game.aliveCivs();
     const finalPops = alive.map((civ) => civ.population);
     const townCenters = game.buildings.filter((building) => building.type === BuildingType.TownCenter).length;
+    const perCiv = alive.map((civ) => {
+      const workforce = countCivJobs(game, civ.id);
+      const centers = game.buildings.filter(
+        (building) =>
+          building.civ === civ.id && building.built && building.type === BuildingType.TownCenter,
+      ).length;
+      const adults = civ.population - workforce.children;
+      const buildingJobs =
+        workforce.farmers +
+        workforce.workers +
+        workforce.priests +
+        workforce.builders +
+        workforce.soldiers;
+      const buildingCounts: Record<string, number> = {};
+      for (const building of game.buildings) {
+        if (building.civ !== civ.id || !building.built) continue;
+        const name = BuildingType[building.type];
+        buildingCounts[name] = (buildingCounts[name] ?? 0) + 1;
+      }
+      return {
+        name: civ.name,
+        pop: civ.population,
+        housing: civ.housing,
+        era: civ.era,
+        centers,
+        adults,
+        buildingJobs,
+        buildingShare: adults > 0 ? buildingJobs / adults : 0,
+        idleShare: adults > 0 ? workforce.idle / adults : 0,
+        workforce,
+        buildingCounts,
+        food: Math.round(civ.food),
+        materials: Math.round(civ.materials),
+        wealth: Math.round(civ.wealth),
+        knowledge: Math.round(civ.knowledge),
+        resourcesAtCap: [
+          civ.food >= FOOD_CAP,
+          civ.materials >= MATERIALS_CAP,
+          civ.wealth >= WEALTH_CAP,
+          civ.knowledge >= KNOWLEDGE_CAP,
+        ].filter(Boolean).length,
+      };
+    });
     console.log(
       '512 growth run',
       JSON.stringify(
@@ -217,12 +351,7 @@ describe('long-run growth', () => {
           maxPops,
           finalPops,
           townCenters,
-          alive: alive.map((civ) => ({
-            name: civ.name,
-            pop: civ.population,
-            housing: civ.housing,
-            era: civ.era,
-          })),
+          perCiv,
           buildings: game.buildings.length,
         },
         null,
@@ -239,9 +368,21 @@ describe('long-run growth', () => {
     // above 300 at the end of the run.
     expect(Math.max(...maxPops)).toBeGreaterThan(300);
     expect(Math.max(...finalPops)).toBeGreaterThan(300);
-    // Expansion actually happened: at least one faction holds more than one city.
-    expect(townCenters).toBeGreaterThanOrEqual(4);
+    // Expansion actually happened: at least one faction reached four cities.
+    expect(Math.max(...perCiv.map((civ) => civ.centers))).toBeGreaterThanOrEqual(4);
     expect(townCenters).toBeGreaterThan(alive.length);
+    // Late-game labour is productive: almost nobody is truly idle and a large
+    // minority hold building or soldier roles.
+    expect(game.stats.adults).toBeGreaterThan(0);
+    expect(game.stats.idleAdults / game.stats.adults).toBeLessThanOrEqual(0.05);
+    expect(Math.max(...perCiv.map((civ) => civ.buildingShare))).toBeGreaterThanOrEqual(0.3);
+    expect(perCiv.every((civ) => civ.centers > 0)).toBe(true);
+    // Resources must not all pin at their caps; wealth and materials in
+    // particular should show the cost of upkeep.
+    expect(
+      perCiv.filter((civ) => civ.materials < MATERIALS_CAP * 0.9 || civ.wealth < WEALTH_CAP * 0.9)
+        .length,
+    ).toBeGreaterThanOrEqual(2);
     expect(curve).toHaveLength(totalTicks / 200);
     expect(alive.length).toBeGreaterThanOrEqual(1);
     // The run must stay comfortably inside the test timeout.

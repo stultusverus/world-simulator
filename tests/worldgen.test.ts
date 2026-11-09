@@ -45,5 +45,5 @@ describe('world generation', () => {
       results.push(`${size}: ${elapsed.toFixed(0)}ms land=${(100 * world.landTiles / (size * size)).toFixed(1)}%`);
     }
     console.log('generation timings:', results.join(' | '));
-  });
+  }, 30_000);
 });

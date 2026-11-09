@@ -1,5 +1,6 @@
 import {
   BUILDING_DEFS,
+  MAX_MIGRANTS_PER_RUN,
   MAX_SETTLEMENTS_PER_CIV,
   NEW_SETTLEMENT_COST,
   NEW_SETTLEMENT_MAX_GAP,
@@ -73,10 +74,11 @@ export interface SettlementStats {
   residents: number;
   housing: number;
   buildings: number;
+  labourers: number;
   idleAdults: number;
 }
 
-/** Per-settlement population, housing and idle labour (all derived). */
+/** Per-settlement population, housing, labour and idle counts (all derived). */
 export function settlementStats(
   game: Game,
   civId: number,
@@ -93,6 +95,7 @@ export function settlementStats(
   }
   const agents = game.agents;
   let residents = 0;
+  let labourers = 0;
   let idleAdults = 0;
   for (let id = 0; id < agents.capacity; id += 1) {
     if (agents.alive[id] !== 1 || agents.civ[id] !== civId) continue;
@@ -101,15 +104,19 @@ export function settlementStats(
     const y = home ? home.y : agents.y[id];
     if (nearestCenter(game, civId, x, y, centers)?.id !== center.id) continue;
     residents += 1;
-    if (agents.age[id] >= 16 && agents.job[id] === Job.Idle) idleAdults += 1;
+    if (agents.age[id] < 14) continue;
+    if (agents.job[id] === Job.Laborer) labourers += 1;
+    else if (agents.job[id] === Job.Idle) idleAdults += 1;
   }
-  return { center, residents, housing, buildings, idleAdults };
+  return { center, residents, housing, buildings, labourers, idleAdults };
 }
 
 /**
- * Moves a few idle adults (and couples when possible) from crowded settlements
- * into settlements with vacant housing. Without this, new cities are built but
- * never populated and their farms cannot be staffed.
+ * Moves idle adults (and couples when possible) from crowded settlements into
+ * the emptiest settlements with vacant housing. New cities are built with
+ * housing and farms but no residents, so this is what actually fills them.
+ * Migration is deliberately round-robin across destinations: filling only the
+ * largest surplus would leave the other satellite cities empty forever.
  */
 export function runMigration(game: Game): void {
   if (game.world.tick % 8 !== 0) return;
@@ -121,17 +128,23 @@ export function runMigration(game: Game): void {
     const stats = centers.map((center) => settlementStats(game, civ.id, center, centers));
     const destinations = stats
       .filter((entry) => entry.housing - entry.residents >= 4)
-      .sort((a, b) => b.housing - b.residents - (a.housing - a.residents) || a.center.id - b.center.id);
+      .sort(
+        (a, b) =>
+          a.residents - b.residents ||
+          b.housing - b.residents - (a.housing - a.residents) ||
+          a.center.id - b.center.id,
+      );
     if (destinations.length === 0) continue;
     const sources = stats
-      .filter((entry) => entry.idleAdults >= 2)
-      .sort((a, b) => b.idleAdults - a.idleAdults || a.center.id - b.center.id);
+      .filter((entry) => entry.labourers + entry.idleAdults >= 2)
+      .sort((a, b) => b.labourers + b.idleAdults - (a.labourers + a.idleAdults) || a.center.id - b.center.id);
     if (sources.length === 0) continue;
 
     const candidates: Array<{ id: number; centerId: number }> = [];
     for (let id = 0; id < agents.capacity; id += 1) {
       if (agents.alive[id] !== 1 || agents.civ[id] !== civ.id) continue;
-      if (agents.age[id] < 16 || agents.job[id] !== Job.Idle) continue;
+      if (agents.age[id] < 16) continue;
+      if (agents.job[id] !== Job.Idle && agents.job[id] !== Job.Laborer) continue;
       const home = game.buildingById.get(agents.home[id]);
       const x = home ? home.x : agents.x[id];
       const y = home ? home.y : agents.y[id];
@@ -159,9 +172,9 @@ export function runMigration(game: Game): void {
     const move = (id: number, destination: Building): void => {
       const house = houseFor(destination) ?? destination;
       agents.home[id] = house.id;
-      agents.job[id] = Job.Idle;
+      agents.job[id] = Job.Laborer;
       agents.work[id] = NO_BUILDING;
-      agents.state[id] = AgentState.Idle;
+      agents.state[id] = AgentState.Working;
       const spot = tryFindWalkableNear(game.world, house.x, house.y, 2) ?? { x: house.x, y: house.y };
       agents.x[id] = spot.x + 0.5;
       agents.y[id] = spot.y + 0.5;
@@ -170,22 +183,25 @@ export function runMigration(game: Game): void {
     };
 
     for (const destination of destinations) {
-      if (moved >= 2) break;
+      if (moved >= MAX_MIGRANTS_PER_RUN) break;
+      const before = moved;
+      const target = Math.min(MAX_MIGRANTS_PER_RUN, before + 2);
       for (const source of sources) {
-        if (moved >= 2 || source.center.id === destination.center.id) continue;
+        if (moved >= target) break;
+        if (source.center.id === destination.center.id) continue;
         for (const candidate of candidates) {
-          if (moved >= 2) break;
+          if (moved >= target) break;
           if (candidate.centerId !== source.center.id || movedIds.has(candidate.id)) continue;
           move(candidate.id, destination.center);
           const partner = agents.partner[candidate.id];
           if (
-            moved < 2 &&
+            moved < target &&
             partner !== NO_AGENT &&
             agents.alive[partner] === 1 &&
             agents.civ[partner] === civ.id &&
             !movedIds.has(partner) &&
             agents.age[partner] >= 16 &&
-            agents.job[partner] === Job.Idle
+            (agents.job[partner] === Job.Idle || agents.job[partner] === Job.Laborer)
           ) {
             const home = game.buildingById.get(agents.home[partner]);
             const x = home ? home.x : agents.x[partner];
@@ -297,9 +313,9 @@ function moveSettlersTo(game: Game, civ: Civ, site: SpawnSite, center: Building,
   const move = (id: number): void => {
     const home = homes[moved.size % homes.length];
     agents.home[id] = home.id;
-    agents.job[id] = Job.Idle;
+    agents.job[id] = Job.Laborer;
     agents.work[id] = NO_BUILDING;
-    agents.state[id] = AgentState.Idle;
+    agents.state[id] = AgentState.Working;
     const spot = tryFindWalkableNear(game.world, home.x, home.y, 2) ?? site;
     agents.x[id] = spot.x + 0.5;
     agents.y[id] = spot.y + 0.5;
@@ -343,7 +359,9 @@ export function foundNewSettlement(game: Game, civ: Civ, site: SpawnSite): Build
 }
 
 /**
- * Factions whose cities are full or crowded may expand into a new settlement.
+ * Factions whose cities are large enough may expand into a new settlement.
+ * Expansion is population-gated (250 people per existing centre), so a faction
+ * can reach its fourth city without first filling every building slot.
  * Checked on a slow, deterministic cadence to stay cheap.
  */
 export function runSettlements(game: Game): void {
@@ -353,16 +371,8 @@ export function runSettlements(game: Game): void {
     if (game.buildings.some((building) => building.civ === civ.id && !building.built)) continue;
     const centers = settlementCenters(game, civ.id);
     if (centers.length === 0 || centers.length >= MAX_SETTLEMENTS_PER_CIV) continue;
-    // Each existing city must be genuinely large before the faction expands,
-    // so the first settlement becomes a real Metropolis rather than a hamlet.
     if (civ.population < NEW_SETTLEMENT_MIN_POP * centers.length) continue;
     if (civ.materials < NEW_SETTLEMENT_COST) continue;
-    const capacity = centers.length * settlementCap(civ);
-    const buildingCount = game.buildings.filter((building) => building.civ === civ.id).length;
-    // Expand only when the existing cities are actually full: either housing is
-    // tight or every building slot has been used (also covers overbuilt saves).
-    const crowded = civ.housing - civ.population <= 4;
-    if (!crowded && buildingCount < capacity) continue;
     const site = findNewSettlementSite(game, civ);
     if (site) foundNewSettlement(game, civ, site);
   }

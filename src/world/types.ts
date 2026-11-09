@@ -45,9 +45,18 @@ export enum Job {
   Priest = 3,
   Soldier = 4,
   Worker = 5,
+  Laborer = 6,
 }
 
-export const JOB_NAMES: readonly string[] = ['Forager', 'Farmer', 'Builder', 'Priest', 'Soldier', 'Worker'];
+export const JOB_NAMES: readonly string[] = [
+  'Forager',
+  'Farmer',
+  'Builder',
+  'Priest',
+  'Soldier',
+  'Worker',
+  'Laborer',
+];
 
 export const IDLE = 0;
 export const NO_OWNER = 255;
@@ -69,6 +78,9 @@ export enum BuildingType {
   Workshop = 3,
   Temple = 4,
   Barracks = 5,
+  Market = 6,
+  University = 7,
+  Monument = 8,
 }
 
 export enum Era {
@@ -190,6 +202,10 @@ export interface ChronicleEntry {
 
 export interface WorldStats {
   population: number;
+  agentCap: number;
+  adults: number;
+  labourers: number;
+  idleAdults: number;
   factions: number;
   wars: number;
   animals: number;

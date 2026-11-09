@@ -727,6 +727,26 @@ input:focus-visible {
   color: #e07a6f;
 }
 
+.cap-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(230, 192, 96, 0.14);
+  color: #e6c060;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  vertical-align: 1px;
+}
+
+.workforce-block {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
 .meter {
   display: block;
   height: 3px;

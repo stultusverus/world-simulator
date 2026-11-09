@@ -87,16 +87,6 @@ function addBareCentre(game: Game, civ: Civ): Building {
   throw new Error('could not place a bare town centre');
 }
 
-function fillBuildingsTo(game: Game, civ: Civ, target: number, population: number): void {
-  civ.population = population;
-  while (game.buildings.filter((building) => building.civ === civ.id).length < target) {
-    const type = BuildingType.House;
-    const spot = game.findBuildingSpot(civ, type, 2);
-    expect(spot).not.toBeNull();
-    game.addBuilding(civ.id, type, spot!.x, spot!.y, true);
-  }
-}
-
 describe('settlement founding', () => {
   it('requires materials, a living faction and less than four settlements', () => {
     const game = freshGame();
@@ -151,15 +141,13 @@ describe('settlement founding', () => {
     expect(buildingsInSettlement(game, civ, center, BuildingType.House).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('runSettlements expands only when population, materials and capacity allow', () => {
+  it('expands once population and materials support a new settlement', () => {
     const game = freshGame();
     const civ = game.civs[0];
     game.world.tick = 4;
-    civ.materials = NEW_SETTLEMENT_COST * 4;
 
-    // Population below NEW_SETTLEMENT_MIN_POP blocks expansion even at capacity.
-    const townSize = 46; // City tier capacity at population 100.
-    fillBuildingsTo(game, civ, townSize, 100);
+    // Population below the per-centre threshold blocks expansion.
+    civ.population = NEW_SETTLEMENT_MIN_POP - 1;
     civ.materials = NEW_SETTLEMENT_COST * 4;
     runSettlements(game);
     expect(settlementCenters(game, civ.id)).toHaveLength(1);
@@ -170,11 +158,9 @@ describe('settlement founding', () => {
     runSettlements(game);
     expect(settlementCenters(game, civ.id)).toHaveLength(1);
 
-    // Enough people and materials: fill the Metropolis capacity and found.
-    fillBuildingsTo(game, civ, settlementCap(civ), civ.population);
+    // Enough people and materials: expansion no longer depends on every
+    // building slot being full.
     civ.materials = NEW_SETTLEMENT_COST * 4;
-    const buildingsAtCap = game.buildings.filter((building) => building.civ === civ.id).length;
-    expect(buildingsAtCap).toBeGreaterThanOrEqual(totalBuildingCapacity(game, civ));
     runSettlements(game);
     expect(settlementCenters(game, civ.id).length).toBeGreaterThanOrEqual(2);
     expect(civ.materials).toBeLessThan(NEW_SETTLEMENT_COST * 4);

@@ -4,11 +4,16 @@ import {
   ERA_KNOWLEDGE_REQ,
   ERA_NAMES,
   ERA_POP_REQ,
+  KNOWLEDGE_CAP,
+  MATERIALS_CAP,
   MAX_FACTIONS,
   SETTLEMENT_TIERS,
   TRAITS,
+  WEALTH_CAP,
+  foodStorageLimit,
   settlementTier,
 } from '../config';
+import { countCivJobs } from '../sim/agents';
 import { personalName } from '../sim/names';
 import {
   settlementCenters,
@@ -91,6 +96,13 @@ function matchesFilter(kind: ChronicleKind, filter: ChronicleFilter): boolean {
 function bar(ratio: number, color: string): string {
   const width = Math.max(0, Math.min(100, Math.round(ratio * 100)));
   return `<span class="meter"><span class="meter-fill" style="width:${width}%;background:${color}"></span></span>`;
+}
+
+/** Small base outputs (0.2, 1.35) need a decimal; large totals do not. */
+function formatOutput(amount: number): string {
+  if (!Number.isFinite(amount)) return '0';
+  if (amount >= 10) return formatNumber(amount);
+  return amount.toFixed(2).replace(/\.?0+$/, '');
 }
 
 function relationBar(value: number): string {
@@ -379,8 +391,9 @@ export class Hud {
     const factionWord = game.stats.factions === 1 ? 'faction' : 'factions';
     const warWord = game.stats.wars === 1 ? 'war' : 'wars';
     const peopleWord = game.stats.population === 1 ? 'person' : 'people';
+    const atCap = game.agents.count >= game.birthCap;
     this.worldStats.innerHTML = `
-      <span><b>${formatNumber(game.stats.population)}</b> ${peopleWord}</span>
+      <span title="Population limit — normal births stop here; an emergency reserve is kept for recovery"><b>${formatNumber(game.stats.population)}</b> / ${formatNumber(game.stats.agentCap)} ${peopleWord}${atCap ? ' <span class="cap-tag">CAPPED</span>' : ''}</span>
       <span class="sep">·</span>
       <span><b>${game.stats.factions}</b> ${factionWord}</span>
       <span class="sep">·</span>
@@ -408,7 +421,7 @@ export class Hud {
             .map((id) => TRAITS.find((trait) => trait.id === id)?.name ?? id)
             .join(', ');
           return `<button type="button" class="civ-chip ${civ.alive ? '' : 'fallen'}" data-civ="${civ.id}"
-            title="${escapeHtml(civ.name)} — ${era} era — ${escapeHtml(traits)}${civ.alive ? '' : ' — fallen'}">
+            title="${escapeHtml(civ.name)} — ${era} era — ${escapeHtml(traits)}${civ.alive ? '' : ` — fallen (peak ${civ.maxPopulation})`}">
             <span class="civ-dot" style="background:${COLORS[civ.color] ?? COLORS[0]}"></span>
             <span class="civ-name">${escapeHtml(civ.name)}</span>
             <span class="civ-pop" data-civ-pop="${civ.id}">${civ.population}</span>
@@ -508,7 +521,14 @@ export class Hud {
       const def = BUILDING_DEFS[building.type];
       const civ = game.civs[building.civ];
       const production = Object.entries(def.produces)
-        .map(([resource, amount]) => `${formatNumber(amount ?? 0)} ${resource}/year`)
+        .map(([resource, amount]) => `${formatOutput(amount ?? 0)} ${resource}/year`)
+        .join(' · ');
+      const extras = [
+        def.housing > 0 ? `${def.housing} housing` : '',
+        def.happiness ? `+${def.happiness} happiness` : '',
+        def.faith > 0 ? `${def.faith} faith` : '',
+      ]
+        .filter(Boolean)
         .join(' · ');
       html = `
         <div class="inspect-head">
@@ -520,6 +540,7 @@ export class Hud {
         <div class="stat-row"><span>Health</span><span>${Math.round(building.hp)} / ${building.maxHp}</span></div>${bar(building.hp / building.maxHp, '#8fd07a')}
         <div class="stat-row"><span>Workers</span><span>${building.workers}${def.workers > 0 ? ` / ${def.workers}` : ''}</span></div>
         ${production ? `<div class="stat-row"><span>Output</span><span>${production}</span></div>` : ''}
+        ${extras ? `<div class="stat-row"><span>Provides</span><span>${extras}</span></div>` : ''}
         <div class="stat-row"><span>Position</span><span>${building.x}, ${building.y}</span></div>
       `;
     } else {
@@ -580,6 +601,16 @@ export class Hud {
     const centers = settlementCenters(game, civ.id);
     const cityCount = centers.length;
     const capacity = totalBuildingCapacity(game, civ);
+    const workforce = countCivJobs(game, civ.id);
+    const atWorldCap = game.agents.count >= game.birthCap;
+    const foodStorage = foodStorageLimit(civ.foodNeed);
+    const extinctionEntry = !civ.alive
+      ? game.chronicle.entries.find(
+          (entry) => entry.civ === civ.id && entry.text.startsWith(`The ${civ.name} are no more`),
+        )
+      : undefined;
+    const capTag = (value: number, cap: number): string =>
+      value >= cap ? ' <span class="cap-tag">MAX</span>' : '';
     const settlementsHtml =
       centers.length === 0
         ? '<span class="muted">No standing town centre.</span>'
@@ -590,7 +621,7 @@ export class Hud {
               return `
                 <div class="settlement-row">
                   <span class="settlement-name">${escapeHtml(settlementName(game, civ.id, center))}${isCapital ? '<span class="save-tag">CAPITAL</span>' : ''}</span>
-                  <span class="muted small-text">${stats.residents}/${stats.housing} pop · ${stats.buildings} bldg</span>
+                  <span class="muted small-text">${stats.residents}/${stats.housing} pop · ${stats.buildings} bldg${stats.labourers > 0 ? ` · ${stats.labourers} lab.` : ''}</span>
                   <button type="button" class="ghost-button small" data-center-civ data-x="${center.x}" data-y="${center.y}">Center</button>
                 </div>`;
             })
@@ -621,7 +652,7 @@ export class Hud {
           </div>`;
       })
       .join('');
-    this.civPanel.innerHTML = `
+    const headerHtml = `
       <div class="civ-head">
         <span class="civ-swatch" style="background:${color}"></span>
         <div class="civ-head-text">
@@ -629,19 +660,49 @@ export class Hud {
           <div class="civ-subtitle">${eraLabel} era · ${tier.name} · ${cityCount} ${cityCount === 1 ? 'city' : 'cities'} · ${escapeHtml(civ.religion)}${civ.alive ? '' : ' · FALLEN'}</div>
         </div>
         <button type="button" class="panel-close" data-close-civ aria-label="Close faction panel">×</button>
-      </div>
+      </div>`;
+    if (!civ.alive) {
+      this.civPanel.innerHTML = `
+        ${headerHtml}
+        <div class="civ-stats">
+          <div><span class="stat-label">People</span><span class="stat-value">0</span></div>
+          <div><span class="stat-label">Peak</span><span class="stat-value">${civ.maxPopulation}</span></div>
+          <div><span class="stat-label">Casualties</span><span class="stat-value">${civ.casualties}</span></div>
+          <div><span class="stat-label">Era</span><span class="stat-value">${eraLabel}</span></div>
+        </div>
+        <p class="muted small-text">${escapeHtml(extinctionEntry?.text ?? 'The cause of this extinction was not recorded.')}</p>
+        <div class="section-title">TRAITS</div>
+        <div class="trait-list">${traits
+          .map((trait) => `<span class="trait-chip" title="${escapeHtml(trait.description)}">${escapeHtml(trait.name)}</span>`)
+          .join('')}</div>
+      `;
+      this.civPanel.classList.remove('hidden');
+      this.lastCivRender = performance.now();
+      return;
+    }
+    this.civPanel.innerHTML = `
+      ${headerHtml}
       <div class="civ-stats">
         <div><span class="stat-label">People</span><span class="stat-value">${civ.population}</span></div>
         <div><span class="stat-label">Housing</span><span class="stat-value">${civ.housing}</span></div>
         <div><span class="stat-label">Soldiers</span><span class="stat-value">${civ.soldiers}</span></div>
         <div><span class="stat-label">Happiness</span><span class="stat-value">${Math.round(civ.happiness)}</span></div>
       </div>
-      <div class="stat-row"><span>Food</span><span>${Math.round(civ.food)} <span class="muted">+${civ.foodProduction.toFixed(1)}/yr</span></span></div>
+      ${extinctionEntry ? `<p class="muted small-text">${escapeHtml(extinctionEntry.text)}</p>` : ''}
+      <div class="stat-row"><span>Food</span><span>${Math.round(civ.food)} / ${foodStorage} <span class="muted">+${civ.foodProduction.toFixed(1)}/yr</span>${capTag(civ.food, foodStorage)}</span></div>
       ${civ.foodShortage > 0 ? `<div class="stat-row warning"><span>Food shortage</span><span>-${Math.round(civ.foodShortage)}/yr</span></div>` : ''}
-      <div class="stat-row"><span>Materials</span><span>${Math.round(civ.materials)}</span></div>
-      <div class="stat-row"><span>Wealth</span><span>${Math.round(civ.wealth)}</span></div>
-      <div class="stat-row"><span>Knowledge</span><span>${Math.round(civ.knowledge)}</span></div>
+      <div class="stat-row"><span>Materials</span><span>${Math.round(civ.materials)} / ${MATERIALS_CAP}${capTag(civ.materials, MATERIALS_CAP)}</span></div>
+      <div class="stat-row"><span>Wealth</span><span>${Math.round(civ.wealth)} / ${WEALTH_CAP}${capTag(civ.wealth, WEALTH_CAP)}</span></div>
+      <div class="stat-row"><span>Knowledge</span><span>${Math.round(civ.knowledge)} / ${KNOWLEDGE_CAP}${capTag(civ.knowledge, KNOWLEDGE_CAP)}</span></div>
       <div class="stat-row"><span>Faith</span><span>${Math.round(civ.faith)}</span></div>${bar(civ.faith / 100, '#d9b3ff')}
+      ${civ.population > civ.housing ? '<div class="stat-row warning"><span>Overcrowded</span><span>births reduced</span></div>' : civ.housing - civ.population <= 2 ? '<div class="stat-row warning"><span>Housing full</span><span>growth limited</span></div>' : ''}
+      ${atWorldCap ? '<div class="stat-row warning"><span>Birth limit reached</span><span>recovery reserve kept</span></div>' : ''}
+      <div class="section-title">WORKFORCE</div>
+      <div class="workforce-block">
+        <div class="stat-row"><span>Farmers · Artisans · Priests</span><span>${workforce.farmers} · ${workforce.workers} · ${workforce.priests}</span></div>
+        <div class="stat-row"><span>Builders · Soldiers · Labourers</span><span>${workforce.builders} · ${workforce.soldiers} · ${workforce.labourers}</span></div>
+        <div class="stat-row"><span>Idle adults · Children</span><span>${workforce.idle} · ${workforce.children}</span></div>
+      </div>
       <div class="stat-row"><span>Settlements</span><span>${cityCount} · ${civ.buildings}/${capacity > 0 ? capacity : civ.buildings} buildings</span></div>
       <div class="era-block">
         <div class="stat-row"><span>${civ.era >= 3 ? 'Era' : `Next era · ${nextEraLabel}`}</span><span>${civ.era >= 3 ? 'Zenith reached' : `${Math.round(civ.knowledge)} / ${eraKnowledge} knowledge`}</span></div>

@@ -17,6 +17,8 @@ code.
 
 - [PLAN.md](PLAN.md) — the living project plan: goals, milestones, status and roadmap.
 - [AGENTS.md](AGENTS.md) — conventions and commands for coding agents working here.
+- [docs/audit-2000.md](docs/audit-2000.md) — 2,000-year simulation audit: findings and
+  proposed improvements.
 
 ## Run it
 
@@ -45,18 +47,22 @@ and whether to begin with three factions plus wildlife or an empty wilderness.
   Children become workers; orphaned children stay with the faction.
 - **Economy** — food, materials, wealth and knowledge. Farms depend on soil fertility,
   workshops make materials and wealth, temples make knowledge and faith, houses make
-  room for growth. Famine is possible when harvests fall behind population.
+  room for growth. Surplus adults work as laborers, while markets, universities and
+  monuments add late-game jobs; upkeep and festivals keep prosperous stockpiles in
+  check. Famine is possible when harvests fall behind population.
 - **Settlement growth** — camps grow into villages, towns, cities and finally a
-  Metropolis. Building caps and territory radius expand with population, and a full
-  city can found another settlement (up to four per faction). Losing one town centre
-  no longer destroys a multi-city faction.
+  Metropolis. Building caps and territory radius expand with population, and a
+  sufficiently populous faction can found another settlement (up to four per faction).
+  Expansion is population-gated, so four cities are reachable before the population
+  cap. Losing one town centre no longer destroys a multi-city faction.
 - **Eras** — factions climb from the Hearth through Craft and Engine to the Zenith era,
   unlocking new buildings and improving their soldiers.
 - **Culture and religion** — traits bias births, production, war and faith; each faction
   has a patron belief that can spread to neighbours under the right conditions.
 - **Diplomacy and war** — relations drift with incidents, religion and trade-mindedness.
   Armies recruit from the people, march overland or sail across water, skirmish, siege
-  and raze. Defenders intercept raiders, so battles cost lives as well as buildings.
+  and raze. Defenders intercept raiders, so battles cost lives as well as buildings;
+  soldiers who take a lethal blow may be carried home wounded instead of dying.
   Unreachable factions will not declare war; cross-water campaigns last longer. Wars end
   from exhaustion, duration, or divine intervention. A capital can fall — and a faction
   with other cities fights on.
@@ -97,9 +103,9 @@ condition and no loss condition.
 
 Autosave runs every 30 seconds and when the tab is hidden. Three manual slots are
 available under **Saves**. Saves are stored in IndexedDB on this browser, keyed by a
-versioned schema; incompatible saves are refused with a message. Loading restores the
-world, people, relationships, wars, RNG state and chronicle, then continues the
-simulation deterministically.
+versioned schema (`SAVE_VERSION` 6); incompatible saves are refused with a message.
+Loading restores the world, people, relationships, wars, RNG state and chronicle, then
+continues the simulation deterministically.
 
 Autosave can be resumed from the creation screen after a reload when IndexedDB is
 available. If browser storage is unavailable, blocked, or fails to open, saves use
@@ -129,16 +135,18 @@ src/
   purely cosmetic tint on a 120-second cycle.
 - **Scale:** the simulation is designed to keep running while zoomed out. Population
   caps are 1,200 / 2,500 / 4,000 agents for 256² / 512² / 1,024². Wildlife caps are
-  150 / 300 / 500. A mature 1,024² world reached 2,522 people across 9 cities (626
-  buildings) by year 1401 in verification.
-- **Save format:** versioned `GameSave` object; the codec is covered by a deterministic
-  save → load → 120-tick continuation test. Land/water connectivity and naval search
-  plans are derived on load, never serialized; territory is canonicalised before saving.
+  150 / 300 / 500. A 512² audit reached 2,498 people across 12 cities (675 buildings) by
+  year 1,600, with every faction holding four settlements.
+- **Save format:** versioned `GameSave` object (`SAVE_VERSION` 6); the codec is covered
+  by a deterministic save → load → 120-tick continuation test. Land/water connectivity
+  and naval search plans are derived on load, never serialized; territory is
+  canonicalised before saving. Saves from older versions are refused rather than
+  migrated.
 - **Measured in this verification environment** (headless Chromium, software renderer,
-  1280×800): ~60 fps at 1,024² while running at 5× with ~2,500 agents zoomed out;
-  simulation cost ~1.6 ms/tick. Actual frame rate depends on hardware, but the renderer
-  is layered for exactly this: the overview texture and territory overlay carry
-  zoomed-out views, while chunk canvases only cover what is on screen.
+  1280×800): 1,024² pacing test costs ~2.4 ms/tick; browser runs stay near 60 fps at
+  1,024² while running at 5× zoomed out. Actual frame rate depends on hardware, but the
+  renderer is layered for exactly this: the overview texture and territory overlay
+  carry zoomed-out views, while chunk canvases only cover what is on screen.
 
 ## Scripts
 
@@ -178,10 +186,14 @@ or UI structure.
 Armies can sail, but civilians do not migrate by sea and new settlements must share
 their parent faction's landmass. Settlement founding is automatic AI expansion; there
 is no player "found city" power. Global agent caps (1,200 / 2,500 / 4,000) remain the
-authoritative population limit per world size, though the HUD does not yet show them.
-In very long games resources can reach their caps and much of the population may be
-idle; late-game content is a follow-up. Navies currently ferry armies only — there is no
-naval combat or coastal interception — and religion spread remains shallow.
+authoritative population limit per world size; the top bar reports the birth limit and
+the small emergency reserve. The audit follow-up added fair birth allocation, emergency
+wanderers, post-war recovery and soft births, so the 2,000-year runs no longer lose a
+faction to the global cap or a housing collapse. Materials and knowledge can still reach
+their caps, wealth remains very unequal, and 1,024² worlds stabilise below their agent
+cap. Navies currently ferry armies only — there is no naval combat or coastal
+interception — and religion spread remains shallow. See
+[docs/audit-2000.md](docs/audit-2000.md) for the audit and follow-up results.
 
 ## License
 

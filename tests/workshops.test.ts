@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BUILDING_DEFS } from '../src/config';
+import {
+  BASE_MATERIALS_PRODUCTION,
+  BUILDING_DEFS,
+  BUILDING_UPKEEP_MATERIALS,
+  BUILDING_UPKEEP_WEALTH,
+  LABORER_MATERIALS,
+  LABORER_WEALTH,
+  WEALTH_UPKEEP_PER_PERSON,
+} from '../src/config';
 import { assignJobs } from '../src/sim/agents';
 import { runEconomy } from '../src/sim/economy';
 import { Game } from '../src/sim/game';
@@ -66,8 +74,30 @@ describe('workshop staffing', () => {
     civ.materials = 0;
     civ.wealth = 0;
     const def = BUILDING_DEFS[BuildingType.Workshop];
+    const builtCount = game.buildings.filter(
+      (building) => building.civ === civ.id && building.built,
+    ).length;
+    let laborers = 0;
+    for (let id = 0; id < game.agents.capacity; id += 1) {
+      if (game.agents.alive[id] === 1 && game.agents.civ[id] === civ.id) {
+        if (game.agents.age[id] >= 14 && game.agents.job[id] === Job.Laborer) laborers += 1;
+      }
+    }
     runEconomy(game);
-    expect(civ.materials).toBeCloseTo(0.65 + civ.population * 0.02 + def.produces.materials! * count / def.workers);
-    expect(civ.wealth).toBeCloseTo(civ.population * 0.012 + def.produces.wealth! * count / def.workers);
+    expect(civ.materials).toBeCloseTo(
+      BASE_MATERIALS_PRODUCTION +
+        laborers * LABORER_MATERIALS +
+        (def.produces.materials! * count) / def.workers -
+        builtCount * BUILDING_UPKEEP_MATERIALS,
+    );
+    expect(civ.wealth).toBeCloseTo(
+      Math.max(
+        0,
+        laborers * LABORER_WEALTH +
+          (def.produces.wealth! * count) / def.workers -
+          builtCount * BUILDING_UPKEEP_WEALTH -
+          civ.population * WEALTH_UPKEEP_PER_PERSON,
+      ),
+    );
   });
 });

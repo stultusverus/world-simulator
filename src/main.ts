@@ -41,6 +41,11 @@ const canvas: HTMLCanvasElement = canvasElement;
 interface DebugStats {
   year: number;
   population: number;
+  agentCap: number;
+  birthCap: number;
+  adults: number;
+  labourers: number;
+  idleAdults: number;
   factions: number;
   wars: number;
   animals: number;
@@ -730,6 +735,11 @@ class WorldsmithApp {
         return {
           year: this.game.year,
           population: this.game.stats.population,
+          agentCap: this.game.stats.agentCap,
+          birthCap: this.game.birthCap,
+          adults: this.game.stats.adults,
+          labourers: this.game.stats.labourers,
+          idleAdults: this.game.stats.idleAdults,
           factions: this.game.stats.factions,
           wars: this.game.stats.wars,
           animals: this.game.stats.animals,

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SAVE_VERSION } from '../src/config';
 import { Game } from '../src/sim/game';
 
 const save = new Game({ size: 256, seedText: 'STORAGE', startWithFactions: false }).toSave(123);
@@ -150,5 +151,49 @@ describe('save menu persistence feedback', () => {
     menu.refreshIfOpen();
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(list.innerHTML).toContain('Year 42');
+  });
+});
+
+describe('save schema version', () => {
+  it('refuses to write a save from another schema version', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    const storage = await import('../src/persist/storage');
+    const stale = { ...save, version: SAVE_VERSION - 1 };
+    await expect(storage.saveToSlot('slot1', stale)).rejects.toThrow('Save version mismatch');
+  });
+
+  it('refuses to read a stored save from another schema version', async () => {
+    const stale = { ...save, version: SAVE_VERSION - 1 };
+    const getRequest: { onsuccess?: () => void; result?: unknown } = {};
+    const db = {
+      transaction: () => ({
+        objectStore: () => ({
+          get: () => {
+            setTimeout(() => getRequest.onsuccess?.(), 0);
+            return getRequest;
+          },
+        }),
+      }),
+    };
+    const openRequest: {
+      result?: unknown;
+      onsuccess?: () => void;
+      onerror?: () => void;
+      onblocked?: () => void;
+      onupgradeneeded?: () => void;
+    } = {};
+    vi.stubGlobal('indexedDB', {
+      open: () => {
+        setTimeout(() => {
+          openRequest.result = db;
+          openRequest.onsuccess?.();
+        }, 0);
+        return openRequest;
+      },
+    });
+    const storage = await import('../src/persist/storage');
+    await storage.initializeStorage();
+    getRequest.result = { slot: 'slot1', save: stale };
+    await expect(storage.readFromSlot('slot1')).rejects.toThrow('incompatible');
   });
 });

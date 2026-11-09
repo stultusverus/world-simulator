@@ -1,5 +1,6 @@
 import {
   AGENT_CAP,
+  AGENT_CAP_RESERVE,
   BUILDING_DEFS,
   DEFAULT_STARTING_FACTIONS,
   MAX_AGENTS_SUPPORTED,
@@ -17,6 +18,7 @@ import { computeReachability, regionAt, type Reachability } from '../world/regio
 import {
   NO_BUILDING,
   NO_OWNER,
+  Job,
   type Building,
   type ChronicleKind,
   type Civ,
@@ -86,9 +88,22 @@ export class Game {
   nextBuildingId = 1;
   nextWarId = 1;
   agentCap: number;
+  /** Slots held back from normal births for emergency wanderers. */
+  agentCapReserve: number;
   wildlifeCap: number;
   worldName: string;
-  stats: WorldStats = { population: 0, factions: 0, wars: 0, animals: 0, buildings: 0, maxEra: 0 };
+  stats: WorldStats = {
+    population: 0,
+    agentCap: 0,
+    adults: 0,
+    labourers: 0,
+    idleAdults: 0,
+    factions: 0,
+    wars: 0,
+    animals: 0,
+    buildings: 0,
+    maxEra: 0,
+  };
   soldierPaths = new Map<number, SoldierPath>();
   reachability: Reachability;
   /** Derived per-target naval plans; never serialized. */
@@ -119,6 +134,7 @@ export class Game {
       this.reachability = computeReachability(this.world);
       this.startWithFactions = save.startWithFactions;
       this.agentCap = AGENT_CAP[save.size] ?? 1200;
+      this.agentCapReserve = AGENT_CAP_RESERVE[save.size] ?? 12;
       this.wildlifeCap = WILDLIFE_CAP[save.size] ?? 150;
       this.agents = AgentPool.fromSnapshot(save.agents);
       this.animals = AnimalPool.fromSnapshot(save.animals);
@@ -153,6 +169,7 @@ export class Game {
     this.reachability = computeReachability(this.world);
     this.startWithFactions = options.startWithFactions;
     this.agentCap = AGENT_CAP[options.size] ?? 1200;
+    this.agentCapReserve = AGENT_CAP_RESERVE[options.size] ?? 12;
     this.wildlifeCap = WILDLIFE_CAP[options.size] ?? 150;
     this.agents = new AgentPool(MAX_AGENTS_SUPPORTED);
     this.animals = new AnimalPool(MAX_ANIMALS_SUPPORTED);
@@ -221,6 +238,11 @@ export class Game {
 
   get year(): number {
     return this.world.tick;
+  }
+
+  /** Normal births stop here; the remainder is reserved for emergency recovery. */
+  get birthCap(): number {
+    return this.agentCap - this.agentCapReserve;
   }
 
   aliveCivs(): Civ[] {
@@ -440,10 +462,18 @@ export class Game {
       civ.housing = 0;
     }
     let population = 0;
+    let adults = 0;
+    let labourers = 0;
+    let idleAdults = 0;
     const agents = this.agents;
     for (let id = 0; id < agents.capacity; id += 1) {
       if (agents.alive[id] === 0) continue;
       population += 1;
+      if (agents.age[id] >= 14) {
+        adults += 1;
+        if (agents.job[id] === Job.Laborer) labourers += 1;
+        else if (agents.job[id] === Job.Idle) idleAdults += 1;
+      }
       const civ = this.civs[agents.civ[id]];
       if (!civ) continue;
       civ.population += 1;
@@ -468,6 +498,10 @@ export class Game {
     }
     this.stats = {
       population,
+      agentCap: this.agentCap,
+      adults,
+      labourers,
+      idleAdults,
       factions: aliveFactions,
       wars: this.wars.length,
       animals: this.animals.count,
@@ -503,7 +537,7 @@ export class Game {
           break;
         }
       }
-      if (!hasCitizen) eliminateCiv(this, civ);
+      if (!hasCitizen) eliminateCiv(this, civ, 'population');
     }
   }
 }

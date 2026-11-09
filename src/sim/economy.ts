@@ -1,7 +1,32 @@
 import {
+  BASE_MATERIALS_PRODUCTION,
   BUILDING_DEFS,
+  BUILDING_UPKEEP_MATERIALS,
+  BUILDING_UPKEEP_WEALTH,
+  FESTIVAL_FOOD_COST_RATIO,
+  FESTIVAL_HAPPINESS,
+  FESTIVAL_INTERVAL,
+  FESTIVAL_MIN_FOOD_RATIO,
+  FESTIVAL_MIN_WEALTH,
+  FESTIVAL_WEALTH_COST,
+  ERA_KNOWLEDGE_REQ,
   FOOD_PER_PERSON,
+  KNOWLEDGE_CAP,
+  KNOWLEDGE_HAPPINESS_CAP,
+  LABORER_FOOD,
+  LABORER_MATERIALS,
+  LABORER_WEALTH,
+  MATERIALS_CAP,
+  MATERIALS_UPKEEP_ERA_FACTOR,
   SOLDIER_UPKEEP_WEALTH,
+  UPKEEP_ERA_MIN_BUILDINGS,
+  UPKEEP_HAPPINESS_PENALTY,
+  WEALTH_CAP,
+  WEALTH_OVERFLOW_RATE,
+  WEALTH_SOFT_CAP,
+  WEALTH_UPKEEP_ERA_FACTOR,
+  WEALTH_UPKEEP_PER_PERSON,
+  foodStorageLimit,
 } from '../config';
 import { BuildingType, Job, type Building, type Civ } from '../world/types';
 import {
@@ -26,8 +51,20 @@ function builtCount(built: readonly Building[], type: BuildingType): number {
   return count;
 }
 
+function isLandmark(type: BuildingType): boolean {
+  return (
+    type === BuildingType.Workshop ||
+    type === BuildingType.Temple ||
+    type === BuildingType.Barracks ||
+    type === BuildingType.Market ||
+    type === BuildingType.University ||
+    type === BuildingType.Monument
+  );
+}
+
 export function runEconomy(game: Game): void {
   const world = game.world;
+  const tick = world.tick;
   for (const civ of game.civs) {
     if (!civ.alive) continue;
     const built = game.buildings.filter((building) => building.civ === civ.id && building.built);
@@ -42,10 +79,12 @@ export function runEconomy(game: Game): void {
     let materialsProduction = 0;
     let wealthProduction = 0;
     let knowledgeProduction = 0;
+    let happinessFromBuildings = 0;
 
     for (const building of built) {
       const def = BUILDING_DEFS[building.type];
       const workerFactor = def.workers > 0 ? Math.min(1, building.workers / def.workers) : 1;
+      happinessFromBuildings += def.happiness ?? 0;
       if (building.type === BuildingType.Farm) {
         const fertility = world.fertility[building.y * world.size + building.x] / 255;
         foodProduction +=
@@ -64,44 +103,104 @@ export function runEconomy(game: Game): void {
         knowledgeProduction += (def.produces.knowledge ?? 0) * eraMultiplier;
       } else if (building.type === BuildingType.TownCenter) {
         knowledgeProduction += (def.produces.knowledge ?? 0) * eraMultiplier;
+      } else if (building.type === BuildingType.Market) {
+        materialsProduction += (def.produces.materials ?? 0) * workerFactor * eraMultiplier * industrious;
+        wealthProduction += (def.produces.wealth ?? 0) * workerFactor * eraMultiplier * mercantile;
+      } else if (
+        building.type === BuildingType.University ||
+        building.type === BuildingType.Monument
+      ) {
+        knowledgeProduction += (def.produces.knowledge ?? 0) * workerFactor * eraMultiplier;
       }
     }
 
-    let idleAgents = 0;
+    let laborers = 0;
     const agents = game.agents;
     for (let id = 0; id < agents.capacity; id += 1) {
       if (agents.alive[id] === 0 || agents.civ[id] !== civ.id) continue;
-      if (agents.age[id] >= 14 && agents.job[id] === Job.Idle) idleAgents += 1;
+      if (agents.age[id] >= 14 && agents.job[id] === Job.Laborer) laborers += 1;
     }
-    foodProduction += idleAgents * 0.2;
-    materialsProduction += 0.65 + civ.population * 0.02;
-    wealthProduction += civ.population * 0.012;
+    foodProduction += laborers * LABORER_FOOD;
+    materialsProduction += BASE_MATERIALS_PRODUCTION + laborers * LABORER_MATERIALS;
+    wealthProduction += laborers * LABORER_WEALTH;
+
+    // Late-game stockpiles need somewhere to go: upkeep makes the building
+    // count and the army a real cost instead of allowing every resource to pin
+    // at its cap forever.
+    const eraUpkeepBuildings = Math.max(0, built.length - UPKEEP_ERA_MIN_BUILDINGS);
+    const upkeepMaterials =
+      built.length * BUILDING_UPKEEP_MATERIALS +
+      eraUpkeepBuildings *
+        BUILDING_UPKEEP_MATERIALS *
+        (1 + civ.era * MATERIALS_UPKEEP_ERA_FACTOR);
+    const upkeepWealth =
+      built.length * BUILDING_UPKEEP_WEALTH +
+      eraUpkeepBuildings *
+        BUILDING_UPKEEP_WEALTH *
+        (1 + civ.era * WEALTH_UPKEEP_ERA_FACTOR);
+    const materialsAvailable = civ.materials + materialsProduction;
+    const wealthAvailable =
+      civ.wealth +
+      wealthProduction -
+      civ.soldiers * SOLDIER_UPKEEP_WEALTH -
+      civ.population * WEALTH_UPKEEP_PER_PERSON;
+    const underfunded = materialsAvailable < upkeepMaterials;
+    civ.materials = Math.min(MATERIALS_CAP, Math.max(0, materialsAvailable - upkeepMaterials));
+    civ.wealth = Math.min(WEALTH_CAP, Math.max(0, wealthAvailable - upkeepWealth));
+    if (civ.wealth > WEALTH_SOFT_CAP) {
+      civ.wealth -= (civ.wealth - WEALTH_SOFT_CAP) * WEALTH_OVERFLOW_RATE;
+    }
 
     const foodNeed = civ.population * FOOD_PER_PERSON;
     const availableFood = civ.food + foodProduction;
     const shortage = Math.max(0, foodNeed - availableFood);
-    civ.food = Math.min(999, Math.max(0, availableFood - foodNeed));
+    const foodStorage = foodStorageLimit(foodNeed);
+    civ.food = Math.min(foodStorage, Math.max(0, availableFood - foodNeed));
     civ.foodShortage = shortage;
     civ.foodProduction = foodProduction;
     civ.foodNeed = foodNeed;
-    civ.materials = Math.min(999, civ.materials + materialsProduction);
-    civ.wealth = Math.min(
-      9999,
-      Math.max(0, civ.wealth + wealthProduction - civ.soldiers * SOLDIER_UPKEEP_WEALTH),
-    );
-    civ.knowledge = Math.min(2000, civ.knowledge + knowledgeProduction);
+    civ.knowledge = Math.min(KNOWLEDGE_CAP, civ.knowledge + knowledgeProduction);
 
     let happiness = 50;
     if (foodNeed > 0) {
       happiness += shortage > 0 ? -18 : Math.min(12, (civ.food / Math.max(4, foodNeed)) * 4);
     }
     happiness += civ.faith * 0.15;
+    happiness += happinessFromBuildings;
+    // Knowledge beyond the final era is not useless: it funds a scholarly
+    // court and civic prestige.
+    happiness += Math.min(
+      KNOWLEDGE_HAPPINESS_CAP,
+      Math.max(0, (civ.knowledge - ERA_KNOWLEDGE_REQ[3]) / 150),
+    );
     happiness -= civ.warId >= 0 ? 12 : 0;
     happiness -= Math.max(0, civ.population - civ.housing) * 2.5;
     if (civ.wealth <= 0 && civ.soldiers > 0) happiness -= 5;
     if (civ.traits.includes('stoic')) happiness += 8;
     if (civ.traits.includes('mercantile')) happiness += 4;
     if (blessed > 1) happiness += 7;
+    if (underfunded) happiness -= UPKEEP_HAPPINESS_PENALTY;
+
+    // Prosperous, well-fed factions celebrate now and then, which gives
+    // surplus food and wealth a use. Tick-derived so no save state is needed.
+    if (
+      tick % FESTIVAL_INTERVAL === 0 &&
+      civ.population > 0 &&
+      civ.food >= foodNeed * FESTIVAL_MIN_FOOD_RATIO &&
+      civ.wealth >= FESTIVAL_MIN_WEALTH
+    ) {
+      civ.food = Math.max(0, civ.food - foodNeed * FESTIVAL_FOOD_COST_RATIO);
+      civ.wealth = Math.max(0, civ.wealth - FESTIVAL_WEALTH_COST);
+      happiness += FESTIVAL_HAPPINESS;
+      game.addChronicle(
+        'society',
+        `${civ.name} hold a grand festival.`,
+        civ.id,
+        civ.centerX,
+        civ.centerY,
+      );
+    }
+
     civ.happiness = Math.max(5, Math.min(100, happiness));
 
     const builders = countJob(game, civ.id, Job.Builder);
@@ -126,16 +225,12 @@ function progressConstruction(game: Game, civ: Civ, builders: number): void {
   site.hp = site.maxHp;
   site.workers = 0;
   game.ownershipDirty = true;
-  const def = BUILDING_DEFS[site.type];
-  if (
-    site.type === BuildingType.Workshop ||
-    site.type === BuildingType.Temple ||
-    site.type === BuildingType.Barracks
-  ) {
+  if (isLandmark(site.type)) {
     const count = game.buildings.filter(
       (building) => building.civ === civ.id && building.built && building.type === site.type,
     ).length;
     if (count === 1) {
+      const def = BUILDING_DEFS[site.type];
       game.addChronicle('society', `${civ.name} raise their first ${def.name}.`, civ.id, site.x, site.y);
     }
   }
@@ -157,6 +252,8 @@ function planConstruction(game: Game, civ: Civ): void {
   const def = BUILDING_DEFS[type];
   if (civ.era < def.era) return;
   if (civ.materials < def.cost) return;
+  if (civ.knowledge < (def.knowledgeCost ?? 0)) return;
+  if (civ.wealth < (def.wealthCost ?? 0)) return;
 
   const primary = pickConstructionCenter(game, civ);
   if (!primary) return;
@@ -172,6 +269,8 @@ function planConstruction(game: Game, civ: Civ): void {
   if (!spot) return;
 
   civ.materials -= def.cost;
+  civ.knowledge -= def.knowledgeCost ?? 0;
+  civ.wealth -= def.wealthCost ?? 0;
   game.addBuilding(civ.id, type, spot.x, spot.y, false);
 }
 
@@ -200,11 +299,31 @@ export function chooseBuildingType(civ: Civ, built: readonly Building[]): Buildi
   ) {
     return BuildingType.Temple;
   }
-  const barracksTarget = civ.warId >= 0 ? Math.min(3, 2 + Math.floor(civ.population / 500)) : 1;
+  const barracksTarget =
+    civ.warId >= 0
+      ? Math.min(5, 2 + Math.floor(civ.population / 250))
+      : Math.min(3, 1 + Math.floor(civ.population / 300));
   if (builtCount(built, BuildingType.Barracks) < barracksTarget && civ.population >= 9) {
     return BuildingType.Barracks;
   }
+  // Late-era civic buildings absorb surplus labour and consume stockpiles.
+  if (civ.era >= 1 && civ.population >= 40) {
+    const marketTarget = Math.min(8, 1 + Math.floor(civ.population / 80));
+    if (builtCount(built, BuildingType.Market) < marketTarget) return BuildingType.Market;
+  }
+  if (civ.era >= 2 && civ.population >= 120) {
+    const universityTarget = Math.min(6, 1 + Math.floor(civ.population / 120));
+    if (builtCount(built, BuildingType.University) < universityTarget) {
+      return BuildingType.University;
+    }
+  }
+  if (civ.era >= 3 && civ.population >= 200) {
+    // Repeatable late-game works absorb materials, knowledge and wealth while
+    // adding faith, happiness and jobs.
+    const monumentTarget = Math.min(6, 1 + Math.floor(civ.population / 200));
+    if (builtCount(built, BuildingType.Monument) < monumentTarget) return BuildingType.Monument;
+  }
   // No construction need left: stop building rather than filling a city with
-  // empty houses. New settlements are founded once the city is genuinely full.
+  // empty houses. New settlements are founded once the population supports it.
   return null;
 }

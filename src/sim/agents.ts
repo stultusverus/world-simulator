@@ -2,7 +2,10 @@ import {
   BIRTH_BASE_CHANCE,
   BUILDING_DEFS,
   MAX_BIRTHS_PER_TICK,
+  OVERCROWDING_BIRTH_PENALTY,
+  OVERCROWDING_BIRTH_SLACK,
   STARVATION_HEALTH_LOSS,
+  WANDERER_RESCUE_CHANCE,
 } from '../config';
 import {
   AgentState,
@@ -59,11 +62,13 @@ interface SettlementGroup {
   farms: Building[];
   workshops: Building[];
   temples: Building[];
+  /** Markets, universities and monuments; staffed by artisans (Job.Worker). */
+  civic: Building[];
   adults: number[];
 }
 
 function emptySettlementGroup(center: Building | null): SettlementGroup {
-  return { center, farms: [], workshops: [], temples: [], adults: [] };
+  return { center, farms: [], workshops: [], temples: [], civic: [], adults: [] };
 }
 
 /**
@@ -100,6 +105,13 @@ function groupBySettlement(
     if (building.type === BuildingType.Farm) groupAt(building.x, building.y).farms.push(building);
     else if (building.type === BuildingType.Workshop) groupAt(building.x, building.y).workshops.push(building);
     else if (building.type === BuildingType.Temple) groupAt(building.x, building.y).temples.push(building);
+    else if (
+      building.type === BuildingType.Market ||
+      building.type === BuildingType.University ||
+      building.type === BuildingType.Monument
+    ) {
+      groupAt(building.x, building.y).civic.push(building);
+    }
   }
   for (const id of adults) {
     const home = game.buildingById.get(agents.home[id]);
@@ -263,6 +275,17 @@ export function assignJobs(game: Game): void {
         priests = priests.concat(takeFrom(group, wantPriests - priests.length, () => true));
       }
 
+      // Civic buildings share the artisan pool with workshops.
+      const civicSlots = group.civic.reduce(
+        (sum, building) => sum + BUILDING_DEFS[building.type].workers,
+        0,
+      );
+      const wantCivic = Math.min(group.adults.length, civicSlots);
+      let civic = takeFrom(group, wantCivic, (id) => agents.job[id] === Job.Worker);
+      if (civic.length < wantCivic) {
+        civic = civic.concat(takeFrom(group, wantCivic - civic.length, () => true));
+      }
+
       for (let i = 0; i < farmers.length; i += 1) {
         const farm = group.farms[i % Math.max(1, group.farms.length)];
         if (!farm) break;
@@ -280,6 +303,15 @@ export function assignJobs(game: Game): void {
         if (!temple) break;
         assign(priests[i], Job.Priest, temple);
         temple.workers += 1;
+      }
+      let civicIndex = 0;
+      for (const building of group.civic) {
+        const slots = BUILDING_DEFS[building.type].workers;
+        while (building.workers < slots && civicIndex < civic.length) {
+          assign(civic[civicIndex], Job.Worker, building);
+          building.workers += 1;
+          civicIndex += 1;
+        }
       }
     }
 
@@ -310,6 +342,7 @@ export function assignJobs(game: Game): void {
     staffRemaining(groups.flatMap((group) => group.farms), Job.Farmer);
     staffRemaining(groups.flatMap((group) => group.workshops), Job.Worker);
     staffRemaining(groups.flatMap((group) => group.temples), Job.Priest);
+    staffRemaining(groups.flatMap((group) => group.civic), Job.Worker);
 
     // Staff the site with its own settlement first, then draw surplus adults
     // from neighbouring settlements.
@@ -342,16 +375,73 @@ export function assignJobs(game: Game): void {
       for (const id of group.adults) {
         if (used.has(id)) continue;
         const previousJob = agents.job[id];
-        agents.job[id] = Job.Idle;
+        agents.job[id] = Job.Laborer;
         agents.work[id] = NO_BUILDING;
-        if (previousJob !== Job.Idle) {
-          agents.state[id] = AgentState.Idle;
+        if (previousJob !== Job.Laborer) {
+          agents.state[id] = AgentState.Working;
           const home = game.buildingById.get(agents.home[id]) ?? group.center ?? undefined;
           placeNearBuilding(game, id, home, civ);
         }
       }
     }
   }
+}
+
+export interface CivWorkforce {
+  children: number;
+  idle: number;
+  farmers: number;
+  builders: number;
+  priests: number;
+  soldiers: number;
+  workers: number;
+  labourers: number;
+}
+
+/** Current job mix for a faction; children are counted separately from adults. */
+export function countCivJobs(game: Game, civId: number): CivWorkforce {
+  const counts: CivWorkforce = {
+    children: 0,
+    idle: 0,
+    farmers: 0,
+    builders: 0,
+    priests: 0,
+    soldiers: 0,
+    workers: 0,
+    labourers: 0,
+  };
+  const agents = game.agents;
+  for (let id = 0; id < agents.capacity; id += 1) {
+    if (agents.alive[id] === 0 || agents.civ[id] !== civId) continue;
+    if (agents.age[id] < 14) {
+      counts.children += 1;
+      continue;
+    }
+    switch (agents.job[id]) {
+      case Job.Farmer:
+        counts.farmers += 1;
+        break;
+      case Job.Builder:
+        counts.builders += 1;
+        break;
+      case Job.Priest:
+        counts.priests += 1;
+        break;
+      case Job.Soldier:
+        counts.soldiers += 1;
+        break;
+      case Job.Worker:
+        counts.workers += 1;
+        break;
+      case Job.Laborer:
+        counts.labourers += 1;
+        break;
+      default:
+        counts.idle += 1;
+        break;
+    }
+  }
+  return counts;
 }
 
 /** Ages agents, applies hunger and health, pairs partners, and handles births. */
@@ -410,34 +500,73 @@ export function runAgentLives(game: Game): void {
     }
   }
 
-  for (const civ of game.civs) {
-    if (!civ.alive) continue;
+  // At the cap, freed birth slots are shared by the factions that need them
+  // most. Processing civilians in ID order let early factions take every slot
+  // and starve later-founded ones out of existence.
+  const orderedCivs = game.aliveCivs().sort(
+    (a, b) => a.population - b.population || a.id - b.id,
+  );
+  const capRoom = Math.max(0, game.agentCap - game.agentCapReserve - agents.count);
+  const birthBudget =
+    capRoom > 0 ? Math.max(1, Math.floor(capRoom / Math.max(1, orderedCivs.length))) : 0;
+  for (const civ of orderedCivs) {
     settleWanderers(game, civ);
     pairSingles(game, civ);
-    bearChildren(game, civ);
+    bearChildren(game, civ, birthBudget);
   }
 }
 
+function hasFertileAdult(game: Game, civId: number, gender: number): boolean {
+  const agents = game.agents;
+  for (let id = 0; id < agents.capacity; id += 1) {
+    if (agents.alive[id] === 0 || agents.civ[id] !== civId) continue;
+    if (agents.gender[id] !== gender) continue;
+    if (agents.age[id] < 16) continue;
+    if (gender === 1 ? agents.age[id] <= 48 : agents.age[id] <= 60) return true;
+  }
+  return false;
+}
+
 function settleWanderers(game: Game, civ: Civ): void {
-  if (civ.population >= 6 || civ.population === 0) return;
-  if (!game.rng.chance(0.06)) return;
-  if (game.agents.count + 2 > game.agentCap) return;
+  if (civ.population === 0) return;
+  const hasWoman = hasFertileAdult(game, civ.id, 1);
+  const hasMan = hasFertileAdult(game, civ.id, 0);
+  const needsRescue = !hasWoman || !hasMan;
+  if (!needsRescue && civ.population >= 6) return;
+  if (!game.rng.chance(needsRescue ? WANDERER_RESCUE_CHANCE : 0.06)) return;
+
+  const genders: number[] = [];
+  if (!hasMan) genders.push(0);
+  if (!hasWoman) genders.push(1);
+  // A tiny faction with both sexes present still benefits from a couple.
+  if (genders.length === 0) genders.push(0, 1);
+  if (game.agents.count + genders.length > game.agentCap) return;
+
   const center = game.buildings.find(
     (building) => building.civ === civ.id && building.built && building.type === BuildingType.TownCenter,
   );
   if (!center) return;
-  let added = 0;
-  for (const gender of [0, 1]) {
+
+  const spawned: number[] = [];
+  for (const gender of genders) {
     const spot = tryFindWalkableNear(game.world, center.x, center.y, 3);
-    if (!spot) break;
+    if (!spot) continue;
     const id = game.spawnAgent(civ.id, spot.x, spot.y, {
       age: game.rng.int(19, 32),
       gender,
       home: center.id,
     });
-    if (id >= 0) added += 1;
+    if (id >= 0) spawned.push(id);
   }
-  if (added > 0) {
+  if (spawned.length >= 2) {
+    const male = spawned.find((id) => game.agents.gender[id] === 0);
+    const female = spawned.find((id) => game.agents.gender[id] === 1);
+    if (male !== undefined && female !== undefined) {
+      game.agents.partner[male] = female;
+      game.agents.partner[female] = male;
+    }
+  }
+  if (spawned.length > 0) {
     game.addChronicle('society', `Wanderers join the ${civ.name}.`, civ.id, center.x, center.y);
   }
 }
@@ -465,17 +594,26 @@ function pairSingles(game: Game, civ: Civ): void {
   }
 }
 
-function bearChildren(game: Game, civ: Civ): void {
+function bearChildren(game: Game, civ: Civ, maxBirths: number): void {
   const agents = game.agents;
   const population = countCivAgents(game, civ.id);
-  const capRoom = game.agentCap - agents.count;
-  if (capRoom <= 0 || population >= civ.housing) return;
+  const capRoom = game.agentCap - game.agentCapReserve - agents.count;
+  const housingSlack = Math.max(2, Math.floor(civ.housing * OVERCROWDING_BIRTH_SLACK));
+  const populationLimit = Math.max(1, civ.housing) + housingSlack;
+  if (capRoom <= 0 || population >= populationLimit) return;
   if (civ.foodProduction < civ.foodNeed * 1.15 && civ.food < civ.foodNeed * 2) return;
 
   const fertile = civ.traits.includes('fertile') ? 1.3 : 1;
   const blessed = civ.blessingUntil > game.world.tick ? 1.55 : 1;
   const happinessFactor = 0.45 + civ.happiness / 140;
-  const chance = BIRTH_BASE_CHANCE * fertile * blessed * happinessFactor;
+  const overcrowded = population >= civ.housing;
+  const chance =
+    BIRTH_BASE_CHANCE *
+    fertile *
+    blessed *
+    happinessFactor *
+    (overcrowded ? OVERCROWDING_BIRTH_PENALTY : 1);
+  const birthLimit = Math.min(MAX_BIRTHS_PER_TICK, Math.max(0, maxBirths));
   let births = 0;
   let males = 0;
   let females = 0;
@@ -486,12 +624,12 @@ function bearChildren(game: Game, civ: Civ): void {
   }
 
   for (let id = 0; id < agents.capacity; id += 1) {
-    if (births >= MAX_BIRTHS_PER_TICK) break;
+    if (births >= birthLimit) break;
     if (agents.alive[id] === 0 || agents.civ[id] !== civ.id) continue;
     if (agents.gender[id] !== 1) continue;
     if (agents.age[id] < 16 || agents.age[id] > 48) continue;
     if (agents.partner[id] === NO_AGENT) continue;
-    if (population + births >= civ.housing) break;
+    if (population + births >= populationLimit) break;
     if (!game.rng.chance(chance)) continue;
 
     const home = game.buildingById.get(agents.home[id]);

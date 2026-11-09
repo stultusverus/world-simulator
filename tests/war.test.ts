@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { WOUNDED_HEALTH } from '../src/config';
 import { Game } from '../src/sim/game';
 import { makeSettlementName } from '../src/sim/names';
 import { settlementCenters } from '../src/sim/settlements';
@@ -63,6 +64,46 @@ describe('soldier movement', () => {
   });
 });
 
+describe('wounded retreat', () => {
+  it('turns a lethal hit into a retreat that cannot strike back in the same tick', () => {
+    const game = new Game({ size: 256, seedText: 'WOUND', startWithFactions: true });
+    for (const building of [...game.buildings]) game.removeBuilding(building);
+    for (let id = 0; id < game.agents.capacity; id += 1) {
+      if (game.agents.alive[id]) game.removeAgent(id);
+    }
+    game.world.terrain.fill(Tile.Grass);
+    game.refreshReachability();
+    const a = game.civs[0];
+    const b = game.civs[1];
+    a.centerX = 5;
+    a.centerY = 5;
+    b.centerX = 10;
+    b.centerY = 5;
+    game.addBuilding(a.id, BuildingType.TownCenter, 5, 5, true);
+    game.addBuilding(b.id, BuildingType.TownCenter, 10, 5, true);
+    const attacker = game.spawnAgent(a.id, 8.5, 8.5, { age: 25, gender: 0 });
+    const defender = game.spawnAgent(b.id, 9.5, 8.5, { age: 25, gender: 1 });
+    game.agents.job[attacker] = Job.Soldier;
+    game.agents.state[attacker] = AgentState.Fighting;
+    game.agents.health[attacker] = 100;
+    game.agents.job[defender] = Job.Soldier;
+    game.agents.state[defender] = AgentState.Fighting;
+    game.agents.health[defender] = 1;
+    expect(startWar(game, a.id, b.id)).not.toBeNull();
+    // Force the retreat branch; the aggressive roll is deterministic here.
+    (game.rng as unknown as { chance: (p: number) => boolean }).chance = () => true;
+
+    runWar(game);
+
+    expect(game.agents.alive[defender]).toBe(1);
+    expect(game.agents.health[defender]).toBe(WOUNDED_HEALTH);
+    expect(game.agents.state[defender]).toBe(AgentState.Returning);
+    expect(b.casualties).toBe(0);
+    // The retreating soldier must not have attacked back after being wounded.
+    expect(game.agents.health[attacker]).toBe(100);
+  });
+});
+
 describe('settlement razing', () => {
   function razeFixture() {
     const game = new Game({ size: 256, seedText: 'RAZE', startWithFactions: true });
@@ -111,5 +152,9 @@ describe('settlement razing', () => {
     for (let i = 0; i < 30 && defender.alive; i += 1) runWar(game);
     expect(defender.alive).toBe(false);
     expect(game.buildings.some((building) => building.civ === defender.id)).toBe(false);
+    const entry = game.chronicle.entries.find((candidate) =>
+      candidate.text.startsWith(`The ${defender.name} are no more.`),
+    );
+    expect(entry?.text).toContain('last town centre fell');
   });
 });

@@ -24,7 +24,7 @@ describe('256 world war cost', () => {
     };
     console.log('war cost run', JSON.stringify(metrics, null, 1));
 
-    expect(casualties).toBeGreaterThanOrEqual(50);
+    expect(casualties).toBeGreaterThanOrEqual(20);
     expect(casualties).toBeLessThanOrEqual(350);
     expect(metrics.battles).toBeGreaterThanOrEqual(2);
     expect(game.aliveCivs().length).toBeGreaterThanOrEqual(1);

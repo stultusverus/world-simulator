@@ -152,5 +152,9 @@ describe('settlement razing', () => {
     for (let i = 0; i < 30 && defender.alive; i += 1) runWar(game);
     expect(defender.alive).toBe(false);
     expect(game.buildings.some((building) => building.civ === defender.id)).toBe(false);
+    const entry = game.chronicle.entries.find((candidate) =>
+      candidate.text.startsWith(`The ${defender.name} are no more.`),
+    );
+    expect(entry?.text).toContain('last town centre fell');
   });
 });

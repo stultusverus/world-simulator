@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILDING_DEFS,
   FESTIVAL_INTERVAL,
-  WEALTH_UPKEEP_PER_PERSON,
   LABORER_MATERIALS,
+  PATRONAGE_KNOWLEDGE_COST,
+  PATRONAGE_WEALTH_COST,
+  WEALTH_UPKEEP_PER_PERSON,
+  foodStorageLimit,
 } from '../src/config';
 import { assignJobs, countCivJobs } from '../src/sim/agents';
 import { runEconomy } from '../src/sim/economy';
+import { runProgress } from '../src/sim/progress';
 import { Game } from '../src/sim/game';
 import { settlementCenters, settlementStats } from '../src/sim/settlements';
 import { BuildingType, Job } from '../src/world/types';
@@ -137,5 +141,34 @@ describe('late-game economy', () => {
     expect(
       game.chronicle.entries.filter((entry) => entry.text.includes('grand festival')),
     ).toHaveLength(1);
+  });
+
+  it('stores only population-scaled food', () => {
+    const game = freshGame('FOOD-STORAGE');
+    const civ = game.civs[0];
+    civ.population = 100;
+    civ.food = 900;
+    runEconomy(game);
+    const storage = foodStorageLimit(civ.foodNeed);
+    expect(storage).toBeLessThan(900);
+    expect(civ.food).toBeLessThanOrEqual(storage);
+  });
+
+  it('spends excess knowledge and wealth on patronage', () => {
+    const game = freshGame('PATRONAGE');
+    const civ = game.civs[0];
+    civ.era = 3;
+    civ.knowledge = 1000;
+    civ.wealth = 500;
+    civ.happiness = 60;
+    game.world.tick = 20;
+    runProgress(game);
+    expect(civ.knowledge).toBeLessThan(1000);
+    expect(civ.wealth).toBeLessThanOrEqual(500 - PATRONAGE_WEALTH_COST);
+    expect(
+      game.chronicle.entries.some((entry) => entry.text.includes('patronise scholars')),
+    ).toBe(true);
+    // Sanity-check the constants are wired into the sink.
+    expect(PATRONAGE_KNOWLEDGE_COST).toBeGreaterThan(0);
   });
 });

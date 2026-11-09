@@ -30,9 +30,11 @@ describe('population extinction', () => {
     expect(game.buildings.some((building) => building.civ === civ.id)).toBe(false);
     expect(game.wars).toHaveLength(0);
     expect(game.aliveCivs().some((candidate) => candidate.id === civ.id)).toBe(false);
-    expect(
-      game.chronicle.entries.some((entry) => entry.text === `The ${civ.name} are no more.`),
-    ).toBe(true);
+    const extinctionEntry = game.chronicle.entries.find((entry) =>
+      entry.text.startsWith(`The ${civ.name} are no more.`),
+    );
+    expect(extinctionEntry).toBeDefined();
+    expect(extinctionEntry?.text).toContain('last people died out');
   });
 
   it('does not eliminate a faction that still has one citizen', () => {

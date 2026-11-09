@@ -247,10 +247,17 @@ describe('building type scaling', () => {
         builtFrom({ ...basics, [BuildingType.University]: 6 }),
       ),
     ).toBe(BuildingType.Monument);
+    // At population 600 the Monument target is min(6, 1 + 3) = 4.
     expect(
       chooseBuildingType(
         zenith,
         builtFrom({ ...basics, [BuildingType.University]: 6, [BuildingType.Monument]: 3 }),
+      ),
+    ).toBe(BuildingType.Monument);
+    expect(
+      chooseBuildingType(
+        zenith,
+        builtFrom({ ...basics, [BuildingType.University]: 6, [BuildingType.Monument]: 4 }),
       ),
     ).toBeNull();
   });

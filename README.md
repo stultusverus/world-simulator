@@ -56,9 +56,10 @@ and whether to begin with three factions plus wildlife or an empty wilderness.
   has a patron belief that can spread to neighbours under the right conditions.
 - **Diplomacy and war** — relations drift with incidents, religion and trade-mindedness.
   Armies recruit from the people, march overland or sail across water, skirmish, siege
-  and raze. Unreachable factions will not declare war; cross-water campaigns last longer.
-  Wars end from exhaustion, duration, or divine intervention. A capital can fall — and
-  a faction with other cities fights on.
+  and raze. Defenders intercept raiders, so battles cost lives as well as buildings.
+  Unreachable factions will not declare war; cross-water campaigns last longer. Wars end
+  from exhaustion, duration, or divine intervention. A capital can fall — and a faction
+  with other cities fights on.
 - **Light wildlife** — deer wander and breed; wolves hunt deer. Populations are capped.
 - **A chronicle** — settlements, eras, wars, battles, peace, famine, conversions and
   divine acts are recorded. Entries with a location can be clicked to jump there.
@@ -177,7 +178,8 @@ or UI structure.
 Armies can sail, but civilians do not migrate by sea and new settlements must share
 their parent faction's landmass. Settlement founding is automatic AI expansion; there
 is no player "found city" power. Global agent caps (1,200 / 2,500 / 4,000) remain the
-authoritative population limit per world size.
+authoritative population limit per world size. In very long games resources can reach
+their caps and much of the population may be idle; late-game content is a follow-up.
 
 ## License
 

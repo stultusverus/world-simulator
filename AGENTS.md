@@ -79,7 +79,7 @@ the console. For simulation changes, also check save → load → continuation.
 
 ## Verification
 
-- `npm test` currently covers **78 checks** across 15 files. Keep it green.
+- `npm test` currently covers **85 checks** across 19 files. Keep it green.
 - Use `?debug=1` and the `window.__worldsmith` debug API
   (`startWorld`, `cast`, `save`, `load`, `speed`, `pause`, `stats`, `renderer`,
   `camera`) for browser verification.
@@ -97,6 +97,10 @@ the console. For simulation changes, also check save → load → continuation.
   player "found city" power.
 - Global agent caps (1,200 / 2,500 / 4,000 by world size) remain the authoritative
   population limit; very large worlds can hit the cap.
+- Late-game resources still cap and much of the population can be idle; this is a known
+  balance gap, not a correctness invariant.
+- Settlement expansion uses a minimum 16-tile gap; four-city expansion is still rare on
+  512² because of the agent cap.
 - Land/water reachability and naval plans are derived from terrain; call
   `Game.refreshReachability()` after any terrain-shape edit.
 - Deployment has only been validated locally; no production deployment has been

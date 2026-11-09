@@ -62,6 +62,10 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
   texture, territory overlay, cosmetic day/night, capital and settlement labels, boats.
 - **Ops** — Cloudflare Workers static-assets config, deploy script, commit/build
   metadata in the game header, dev server on `0.0.0.0`.
+- **Reliability & balance pass** — zero-population factions are eliminated, famine scales
+  with the food deficit and varies per person, migration/cross-settlement labour populates
+  new cities, defenders intercept and wars cause casualties, and the HUD exposes
+  per-settlement population/housing plus food shortages.
 
 ## 4. Milestones
 
@@ -75,6 +79,7 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | 6 | Review-found war retry throttle | ✅ Done | `80cdd95`; 45 tests; 1024 pacing test 4.3 s → 1.1 s |
 | 7 | AGENTS.md & PLAN.md tracking | ✅ Done | This document |
 | 8 | Naval transport, Metropolis + multi-settlement growth, saves refresh, build-metadata safety, docs | ✅ Done | PR #11; 78 tests; browser QA |
+| 9 | Audit fixes: zero-pop extinction, proportional/varied famine, city migration + cross-settlement labour, defender interception, HUD warnings | ✅ Done | PR #11 follow-up; 85 tests; 1000-year run QA |
 
 ## 5. Verification snapshot
 
@@ -82,15 +87,18 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
 
 - `npm install` completed; `@types/node` and `wrangler` present.
 - `npm run typecheck` — pass.
-- `npm test` — **78/78 pass** across 15 test files (~12 s).
-- `npm run build` — pass; production `dist/` generated (39 modules, ~137 kB JS).
+- `npm test` — **85/85 pass** across 19 test files (~15 s).
+- `npm run build` — pass; production `dist/` generated (39 modules, ~140 kB JS).
 - Browser checks at 1280×800 — creation, 512²/1024² growth runs, Metropolis and
-  three-city faction panel, settlement labels, boat rendering, save slot → load,
-  live autosave row refresh while the Saves menu is open, old pre-change Slot I save
-  loads, no console errors.
+  three-city faction panel with per-settlement residents/housing, settlement labels,
+  boat rendering, save slot → load, live autosave row refresh while the Saves menu is
+  open, no console errors.
+- Audit runs (AUDIT3 512², AUDIT4 256², 1,000 years) — no zero-population “zombie”
+  factions, no empty satellite settlements, no famine extinctions; 2–12 battles and
+  47–557 casualties per run; navies sailed and landed.
 - Performance — 1024² at year 1401: **2,522 people / 9 cities / 626 buildings**, solid
-  **60 fps at 5×** zoomed out, **~1.6 ms/tick** simulation cost; 1,400 ticks in 3.6 s.
-  A 512² run reached 2,298 people across 9 cities by year 901.
+  **60 fps at 5×** zoomed out; a 512² run reached 2,468 people / 9 cities by year 1000
+  and stayed at ~60 fps at 5× in browser QA.
 - Dev server — `http://127.0.0.1:5173/`; responsive; no replacement server started.
 - Deployment — not performed; Cloudflare remains unauthenticated.
 - CI — intentionally **not added** (explicit user request); all verification is local.
@@ -106,6 +114,13 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
 - [x] **Build metadata test safety:** `__COMMIT_HASH__`/`__BUILD_DATE__` are defined
       for Vitest; header rendering is covered by `tests/build-info.test.ts`.
 - [x] **Keep docs current:** README screenshots, PLAN status, AGENTS constraints.
+- [x] **Audit fixes:** population extinction, proportional famine, empty-city
+      migration/labour, defender interception, food-shortage HUD warnings.
+- [ ] **Late-game economy:** resources cap and much of the population is idle; add
+      upkeep/sinks, more job slots or new late-era content.
+- [ ] **Four-city expansion:** the 512² agent cap makes the fourth city rare; tune the
+      expansion threshold or cap.
+- [ ] **War balance:** 256² casualty counts are high; tune army size and recovery.
 - [ ] **Automated browser smoke tests:** manual browser QA performed; automation
       (e.g. Playwright) still deferred.
 - [ ] **Deploy after approval:** needs Cloudflare credentials and explicit permission.
@@ -138,9 +153,11 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
 
 | Issue | Impact | Next step |
 |---|---|---|
+| Late-game resources cap and much labour is idle | Food/materials/wealth/knowledge saturate; most adults have no job slot | Add upkeep/sinks, more job slots or late-era content |
+| Fourth city is rare on 512² | Three civs reach the 2,500-agent cap before the 900-pop expansion mark | Tune expansion thresholds or raise the cap after profiling |
+| 256² wars are very costly | 557 casualties over 1,000 years in one audit run | Tune army size, healing and peace conditions |
 | No civilian sea migration or overseas settlements | New cities must be on the same landmass; navies are military-only | Future coastal expansion/colony mechanic |
 | Settlement founding is AI-only | Players cannot directly plant a city; factions expand on their own | Consider a "found settlement" power if requested |
-| Agent caps limit total population (1,200/2,500/4,000) | Very large worlds can hit the cap before every city fills | Profile and raise caps only if the target hardware allows |
 | Reachability/naval plans are derived, not serialized | Terrain-shape changes must call `refreshReachability()` | Keep future sculpting behind that hook |
 | Production deployment not performed | Cloudflare config validated locally only | Needs credentials + explicit approval |
 | Temporary IndexedDB fallback is session-only | Saves lost on reload/close | UI warns; expected for blocked storage |
@@ -173,6 +190,14 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
   reproduces exactly; reachability and naval caches are derived and never serialized.
 - **2026-11-09 — no CI:** explicitly excluded from this iteration; verification is
   local commands plus browser QA.
+- **2026-11-09 — audit run:** 1,000-year runs exposed zero-population factions still
+  marked alive, lockstep famine deaths, unpopulated satellite cities with idle capital
+  labour, and largely bloodless wars.
+- **2026-11-09 — audit fixes:** zero-population factions are eliminated; starvation is
+  proportional to the deficit with per-person variation; cross-settlement labour and
+  migration fill new cities; defenders intercept and wars produce casualties; HUD shows
+  settlement residents/housing and food shortages; settlement minimum spacing raised to
+  16 tiles. Late-game resource caps, fourth-city reach and war-cost tuning remain open.
 
 ## 10. How progress is tracked
 

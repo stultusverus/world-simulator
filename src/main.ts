@@ -527,6 +527,7 @@ class WorldsmithApp {
     if (!this.game) return;
     try {
       await saveToSlot(AUTOSAVE_SLOT, this.game.toSave());
+      this.saveMenu.refreshIfOpen();
       if (!isPersistentStorage() && !this.temporaryAutosaveWarned) {
         this.temporaryAutosaveWarned = true;
         this.hud.toast('Autosave is temporary and will be lost when this page is reloaded or closed.', 'info');

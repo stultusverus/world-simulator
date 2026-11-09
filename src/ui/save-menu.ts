@@ -94,6 +94,12 @@ export class SaveMenu {
     return this.open;
   }
 
+  /** Re-reads slots when an autosave lands while the menu is open. */
+  refreshIfOpen(): void {
+    if (!this.open || this.busy) return;
+    void this.refresh();
+  }
+
   private setStatus(text: string, error = false): void {
     this.status.textContent = text;
     this.status.classList.toggle('error', error);

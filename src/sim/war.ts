@@ -5,6 +5,11 @@ import type { Game } from './game';
 const ENGAGE_RANGE = 2.1;
 const SIEGE_RANGE = 2.6;
 const MOVE_SPEED = 8;
+/** A* node budget for a single soldier route request. */
+const SOLDIER_PATH_NODES = 1800;
+/** Failed route searches are shared per target for one tick so a stalled army
+ *  cannot multiply A* searches by the number of soldiers on every tick. */
+const failedRoutes = new WeakMap<Game, Map<number, number>>();
 
 export type WarEndReason = 'peace' | 'blessing' | 'collapse';
 
@@ -206,16 +211,21 @@ function moveToward(game: Game, id: number, tx: number, ty: number, speed: numbe
   const agents = game.agents;
   let path = game.soldierPaths.get(id);
   if (!path || path.targetKey !== targetKey || path.index >= path.path.length) {
+    const failures = failedRoutes.get(game);
+    if (failures && game.world.tick < (failures.get(targetKey) ?? 0)) return;
     const found = findPath(
       game.world,
       Math.floor(agents.x[id]),
       Math.floor(agents.y[id]),
       Math.floor(tx),
       Math.floor(ty),
-      1800,
+      SOLDIER_PATH_NODES,
     );
     if (!found || found.length === 0) {
-      // Retry on the next movement attempt; a failed search is not a route.
+      // Retry on a later tick, not once per soldier per tick.
+      const retryMap = failures ?? new Map<number, number>();
+      retryMap.set(targetKey, game.world.tick + 1);
+      failedRoutes.set(game, retryMap);
       game.soldierPaths.delete(id);
       return;
     }

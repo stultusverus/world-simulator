@@ -52,8 +52,8 @@ the console. For simulation changes, also check save → load → continuation.
   build-info label.
 - `src/persist/` — IndexedDB storage with a temporary in-memory fallback.
 - `src/main.ts` — app wiring, input, fixed-step loop, autosave, debug API.
-- `tests/` — worldgen, simulation, war/pathfinding, naval, settlements/growth,
-  extinction/famine/labour, powers, storage, save round-trip.
+- `tests/` — worldgen, simulation, war/pathfinding/cost, naval, settlements/growth,
+  late-game labour/economy, extinction/famine, powers, storage, save round-trip.
 
 ## Invariants
 
@@ -79,13 +79,14 @@ the console. For simulation changes, also check save → load → continuation.
 
 ## Verification
 
-- `npm test` currently covers **85 checks** across 19 files. Keep it green.
+- `npm test` currently covers **96 checks** across 21 files. Keep it green.
 - Use `?debug=1` and the `window.__worldsmith` debug API
   (`startWorld`, `cast`, `save`, `load`, `speed`, `pause`, `stats`, `renderer`,
   `camera`) for browser verification.
 - Check gameplay flows, not only rendering: creation, empty-world start, powers, save
   slots/autosave, resume, chronicle jump, a war if you touched combat, growth to a
-  Metropolis/multiple settlements, and a cross-water war if you touched navies.
+  Metropolis/four settlements, the workforce/cap HUD, and a cross-water war if you
+  touched navies.
 - The dev server is app-only at `:5173`; do not modify or replace the DSH Web GUI on
   `:3080`. CI is intentionally not configured; run the local commands above.
 
@@ -96,14 +97,17 @@ the console. For simulation changes, also check save → load → continuation.
 - Settlement founding is automatic AI expansion (up to four per faction); there is no
   player "found city" power.
 - Global agent caps (1,200 / 2,500 / 4,000 by world size) remain the authoritative
-  population limit; very large worlds can hit the cap.
-- Late-game resources still cap and much of the population can be idle; this is a known
-  balance gap, not a correctness invariant.
-- Settlement expansion uses a minimum 16-tile gap; four-city expansion is still rare on
-  512² because of the agent cap. The HUD does not yet surface the cap.
+  population limit; the top bar now shows population / cap and a CAPPED tag.
+- Late-game surplus adults become laborers and civic buildings (Market, University,
+  Monument) add jobs; materials and knowledge can still reach their caps, and poor
+  factions can run low on wealth. This is a balance gap, not a correctness invariant.
+- Settlement founding is population-gated at 250 people per existing centre; four cities
+  are reachable on 512², and the minimum 16-tile gap still applies.
 - Navies ferry armies only; there is no naval combat or coastal interception yet, and
   religion spread is sparse. These are documented gameplay-depth gaps, not save/schema
   changes.
+- `SAVE_VERSION` is 6. Saves from older versions are refused (no migration); older
+  autosaves will not resume.
 - Land/water reachability and naval plans are derived from terrain; call
   `Game.refreshReachability()` after any terrain-shape edit.
 - Deployment has only been validated locally; no production deployment has been

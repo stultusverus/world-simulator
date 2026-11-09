@@ -17,16 +17,19 @@ export class HelpOverlay {
           <button type="button" class="panel-close" id="help-close" aria-label="Close help">×</button>
         </div>
         <p class="modal-lead">Worldsmith is a living sandbox. You do not win. You seed, shape and witness:
-        factions grow from six founders into towns, learn crafts, quarrel, worship, starve, and go to war.
+        factions grow from six founders into towns and cities, learn crafts, quarrel, worship, starve, and go to war.
         Nothing you do is required — everything you do leaves a mark in the chronicle.</p>
 
         <h3>Powers</h3>
         <div class="help-grid">
-          <div><strong>Spawn</strong><p>Factions, settlers, deer and wolves. New factions need open land away from existing capitals.</p></div>
+          <div><strong>Spawn</strong><p>Factions, settlers, deer and wolves. New factions need open land away from existing settlements.</p></div>
           <div><strong>Bless</strong><p>Heal the wounded, bless fields and cradles, calm every war, or grant a settlement a spark of knowledge.</p></div>
           <div><strong>Inspect</strong><p>With no power selected, hover anything to read its story. Click to pin a selection.</p></div>
-          <div><strong>Territory</strong><p>Tinted land belongs to a faction. Borders, capitals and their banners tell the rest.</p></div>
+          <div><strong>Territory</strong><p>Tinted land belongs to a faction. Borders, cities and their banners tell the rest.</p></div>
         </div>
+
+        <p class="modal-lead">Armies march overland and cross water in boats to reach enemy shores. Prosperous
+        factions fill a city and then found new settlements around it, so a people can spread across many towns.</p>
 
         <h3>Controls</h3>
         <div class="key-grid">

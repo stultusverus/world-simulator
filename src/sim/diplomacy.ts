@@ -1,5 +1,6 @@
 import { MAX_FACTIONS } from '../config';
 import type { Civ } from '../world/types';
+import { canReachCivs } from './naval';
 import type { Game } from './game';
 import { startWar } from './war';
 
@@ -58,7 +59,8 @@ export function runDiplomacy(game: Game): void {
         a.food > 4 &&
         b.food > 4 &&
         hasBarracks(game, a) &&
-        hasBarracks(game, b)
+        hasBarracks(game, b) &&
+        canReachCivs(game, a, b)
       ) {
         const militarist = a.traits.includes('militarist') || b.traits.includes('militarist');
         const threshold = militarist ? -26 : -32;

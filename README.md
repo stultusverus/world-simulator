@@ -1,9 +1,9 @@
 # Worldsmith
 
 A browser-based god sandbox. Shape a world, seed its peoples, then watch factions grow
-from six founders into towns — farming, worshipping, quarrelling, starving, signing
-peace and going to war. You do not win. You intervene, or you don't, and the chronicle
-remembers.
+from six founders into towns and cities — farming, worshipping, quarrelling, starving,
+signing peace, sailing to war and founding new settlements. You do not win. You
+intervene, or you don't, and the chronicle remembers.
 
 Built with **Vite + strict TypeScript + Canvas 2D**, no runtime dependencies, and no
 external art assets — every tile, unit, building and icon is generated procedurally in
@@ -39,22 +39,27 @@ and whether to begin with three factions plus wildlife or an empty wilderness.
   rivers carved downhill across the land. Same seed produces the same world.
 - **Factions** — generated names, banner colours and two traits (militarist, fertile,
   industrious, zealous, scholarly, mercantile, stoic). Each starts with a town centre,
-  houses, farms and six founders.
+  houses, farms and six founders; prosperous factions found new settlements.
 - **People, not numbers** — every villager is an agent with a home, job, age, health,
   hunger, happiness, faith and family. Couples marry, raise children, grow old and die.
   Children become workers; orphaned children stay with the faction.
 - **Economy** — food, materials, wealth and knowledge. Farms depend on soil fertility,
   workshops make materials and wealth, temples make knowledge and faith, houses make
   room for growth. Famine is possible when harvests fall behind population.
-- **Settlement growth** — camps grow into villages, towns and cities. Building caps and
-  territory radius expand with population.
+- **Settlement growth** — camps grow into villages, towns, cities and finally a
+  Metropolis. Building caps and territory radius expand with population, and a full
+  city can found another settlement (up to four per faction). Losing one town centre
+  no longer destroys a multi-city faction.
 - **Eras** — factions climb from the Hearth through Craft and Engine to the Zenith era,
   unlocking new buildings and improving their soldiers.
 - **Culture and religion** — traits bias births, production, war and faith; each faction
   has a patron belief that can spread to neighbours under the right conditions.
 - **Diplomacy and war** — relations drift with incidents, religion and trade-mindedness.
-  Armies recruit from the people, march to enemy buildings, skirmish, siege and raze.
-  Wars end from exhaustion, duration, or divine intervention. A capital can fall.
+  Armies recruit from the people, march overland or sail across water, skirmish, siege
+  and raze. Defenders intercept raiders, so battles cost lives as well as buildings.
+  Unreachable factions will not declare war; cross-water campaigns last longer. Wars end
+  from exhaustion, duration, or divine intervention. A capital can fall — and a faction
+  with other cities fights on.
 - **Light wildlife** — deer wander and breed; wolves hunt deer. Populations are capped.
 - **A chronicle** — settlements, eras, wars, battles, peace, famine, conversions and
   divine acts are recorded. Entries with a location can be clicked to jump there.
@@ -107,9 +112,11 @@ lost when the page is reloaded or closed.
 src/
   config.ts            all tuning constants: caps, rates, buildings, eras, traits
   core/                seeded PRNG (mulberry32), value noise/fBm, helpers
-  world/               world model, procedural generation, ownership/territory
+  world/               world model, procedural generation, ownership/territory,
+                       land/water connectivity regions
   sim/                 Game orchestrator + agents, economy, war, diplomacy, progress,
-                       environment, powers, pathfinding, save snapshots
+                       settlements, naval crossings, environment, powers, pathfinding,
+                       save snapshots
   render/              procedural sprite atlas, camera, chunked Canvas 2D renderer
   ui/                  creation screen, HUD, chronicle, civ panel, saves, help
   persist/             IndexedDB storage wrapper
@@ -122,15 +129,16 @@ src/
   purely cosmetic tint on a 120-second cycle.
 - **Scale:** the simulation is designed to keep running while zoomed out. Population
   caps are 1,200 / 2,500 / 4,000 agents for 256² / 512² / 1,024². Wildlife caps are
-  150 / 300 / 500.
+  150 / 300 / 500. A mature 1,024² world reached 2,522 people across 9 cities (626
+  buildings) by year 1401 in verification.
 - **Save format:** versioned `GameSave` object; the codec is covered by a deterministic
-  save → load → 120-tick continuation test.
+  save → load → 120-tick continuation test. Land/water connectivity and naval search
+  plans are derived on load, never serialized; territory is canonicalised before saving.
 - **Measured in this verification environment** (headless Chromium, software renderer,
-  1280×800): ~60 fps at 256² and 1,024² while paused *and* while running at 5× with
-  ~500–530 agents; simulation cost ~1–2 ms/tick at 1,024². Actual frame rate depends on
-  hardware, but the renderer is layered for exactly this: the overview texture and
-  territory overlay carry zoomed-out views, while chunk canvases only cover what is on
-  screen.
+  1280×800): ~60 fps at 1,024² while running at 5× with ~2,500 agents zoomed out;
+  simulation cost ~1.6 ms/tick. Actual frame rate depends on hardware, but the renderer
+  is layered for exactly this: the overview texture and territory overlay carry
+  zoomed-out views, while chunk canvases only cover what is on screen.
 
 ## Scripts
 
@@ -166,6 +174,14 @@ monsters, minimap, world file import/export and seed sharing, statistical graphs
 sound, mobile/touch controls, and screenshot export. All tuning lives in
 `src/config.ts`, so balancing and new powers can be added without touching the renderer
 or UI structure.
+
+Armies can sail, but civilians do not migrate by sea and new settlements must share
+their parent faction's landmass. Settlement founding is automatic AI expansion; there
+is no player "found city" power. Global agent caps (1,200 / 2,500 / 4,000) remain the
+authoritative population limit per world size, though the HUD does not yet show them.
+In very long games resources can reach their caps and much of the population may be
+idle; late-game content is a follow-up. Navies currently ferry armies only — there is no
+naval combat or coastal interception — and religion spread remains shallow.
 
 ## License
 

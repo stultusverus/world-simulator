@@ -25,7 +25,7 @@ vi.mock('../src/ui/creation', () => ({
     setBusy = vi.fn();
   },
 }));
-vi.mock('../src/ui/save-menu', () => ({ SaveMenu: class { hide = vi.fn(); } }));
+vi.mock('../src/ui/save-menu', () => ({ SaveMenu: class { hide = vi.fn(); refreshIfOpen = vi.fn(); } }));
 vi.mock('../src/ui/help', () => ({ HelpOverlay: class { hide = vi.fn(); } }));
 
 interface AppApi {

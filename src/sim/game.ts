@@ -13,8 +13,10 @@ import {
 import { RNG, mixSeed } from '../core/rng';
 import { generateWorld } from '../world/generate';
 import { isWalkableAt, randomLandTile, recomputeOwnership } from '../world/world';
+import { computeReachability, regionAt, type Reachability } from '../world/regions';
 import {
   NO_BUILDING,
+  NO_OWNER,
   type Building,
   type ChronicleKind,
   type Civ,
@@ -30,10 +32,12 @@ import { makeWorldName } from './names';
 import { foundFaction } from './faction';
 import { assignJobs, runAgentLives } from './agents';
 import { runEconomy } from './economy';
-import { runWar } from './war';
+import { runWar, eliminateCiv } from './war';
 import { runDiplomacy } from './diplomacy';
 import { runProgress } from './progress';
 import { runEnvironment } from './environment';
+import { runMigration, runSettlements, settlementCenters } from './settlements';
+import type { NavalCrossing } from './naval';
 import type { GameSave } from './save-types';
 
 export interface GameOptions {
@@ -86,6 +90,9 @@ export class Game {
   worldName: string;
   stats: WorldStats = { population: 0, factions: 0, wars: 0, animals: 0, buildings: 0, maxEra: 0 };
   soldierPaths = new Map<number, SoldierPath>();
+  reachability: Reachability;
+  /** Derived per-target naval plans; never serialized. */
+  navalPlans = new Map<string, NavalCrossing | null>();
   terrainDirty: number[] = [];
   ownershipDirty = true;
 
@@ -109,6 +116,7 @@ export class Game {
         terrainVersion: 1,
         ownerVersion: 1,
       };
+      this.reachability = computeReachability(this.world);
       this.startWithFactions = save.startWithFactions;
       this.agentCap = AGENT_CAP[save.size] ?? 1200;
       this.wildlifeCap = WILDLIFE_CAP[save.size] ?? 150;
@@ -142,6 +150,7 @@ export class Game {
       return;
     }
     this.world = generateWorld(options.size, options.seedText);
+    this.reachability = computeReachability(this.world);
     this.startWithFactions = options.startWithFactions;
     this.agentCap = AGENT_CAP[options.size] ?? 1200;
     this.wildlifeCap = WILDLIFE_CAP[options.size] ?? 150;
@@ -163,6 +172,9 @@ export class Game {
   }
 
   toSave(savedAt = Date.now()): GameSave {
+    // Territory is derived from buildings and population tier. Canonicalise it
+    // before serialising so a load recomputes exactly the same map.
+    this.refreshOwnership();
     return {
       version: SAVE_VERSION,
       savedAt,
@@ -321,8 +333,21 @@ export class Game {
     type: Building['type'],
     minRadius = 2,
     maxRadius?: number,
+    center?: SpawnSite,
   ): SpawnSite | null {
+    const originX = center?.x ?? civ.centerX;
+    const originY = center?.y ?? civ.centerY;
     const maxR = maxRadius ?? SETTLEMENT_TIERS[settlementTier(civ.population)].radius;
+    const originRegion = regionAt(this.world, this.reachability, Math.floor(originX), Math.floor(originY));
+    const accept = (x: number, y: number): boolean => {
+      if (!isWalkableAt(this.world, x, y)) return false;
+      const index = y * this.world.size + x;
+      if (this.buildingAt.has(index)) return false;
+      const owner = this.world.owner[index];
+      if (owner !== NO_OWNER && owner !== civ.id) return false;
+      if (originRegion !== 0 && regionAt(this.world, this.reachability, x, y) !== originRegion) return false;
+      return true;
+    };
     const preferFertility = type === 2; // Farm
     let best: SpawnSite | null = null;
     let bestScore = -1;
@@ -330,11 +355,10 @@ export class Game {
     for (let i = 0; i < attempts; i += 1) {
       const angle = this.rng.next() * Math.PI * 2;
       const radius = minRadius + this.rng.next() * Math.max(1, maxR - minRadius);
-      const x = Math.round(civ.centerX + Math.cos(angle) * radius);
-      const y = Math.round(civ.centerY + Math.sin(angle) * radius);
-      if (!isWalkableAt(this.world, x, y)) continue;
+      const x = Math.round(originX + Math.cos(angle) * radius);
+      const y = Math.round(originY + Math.sin(angle) * radius);
+      if (!accept(x, y)) continue;
       const index = y * this.world.size + x;
-      if (this.buildingAt.has(index)) continue;
       if (preferFertility) {
         const score = this.world.fertility[index];
         if (score > bestScore) {
@@ -353,17 +377,21 @@ export class Game {
         for (let dy = -r; dy <= r; dy += 1) {
           for (let dx = -r; dx <= r; dx += 1) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-            const x = Math.round(civ.centerX + dx);
-            const y = Math.round(civ.centerY + dy);
-            if (!isWalkableAt(this.world, x, y)) continue;
-            const index = y * this.world.size + x;
-            if (this.buildingAt.has(index)) continue;
+            const x = Math.round(originX + dx);
+            const y = Math.round(originY + dy);
+            if (!accept(x, y)) continue;
             return { x, y };
           }
         }
       }
     }
     return null;
+  }
+
+  /** Recomputes land/water connectivity after a terrain-shape change. */
+  refreshReachability(): void {
+    this.reachability = computeReachability(this.world);
+    this.navalPlans.clear();
   }
 
   markTerrainChanged(index: number): void {
@@ -391,10 +419,14 @@ export class Game {
     let bestDistance = radius;
     for (const civ of this.civs) {
       if (!civ.alive) continue;
-      const distance = Math.hypot(civ.centerX - x, civ.centerY - y);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = civ;
+      const centers = settlementCenters(this, civ.id);
+      const candidates = centers.length > 0 ? centers : [{ x: civ.centerX, y: civ.centerY } as const];
+      for (const center of candidates) {
+        const distance = Math.hypot(center.x - x, center.y - y);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = civ;
+        }
       }
     }
     return best;
@@ -449,11 +481,29 @@ export class Game {
     assignJobs(this);
     runEconomy(this);
     runAgentLives(this);
+    this.eliminateEmptyCivs();
     runWar(this);
     runDiplomacy(this);
     runProgress(this);
+    runSettlements(this);
+    runMigration(this);
     runEnvironment(this);
     this.updateStats();
     if (this.ownershipDirty || this.world.tick % 4 === 0) this.refreshOwnership();
+  }
+
+  /** A people with no living individuals is extinct even if walls remain. */
+  private eliminateEmptyCivs(): void {
+    for (const civ of this.civs) {
+      if (!civ.alive) continue;
+      let hasCitizen = false;
+      for (let id = 0; id < this.agents.capacity; id += 1) {
+        if (this.agents.alive[id] === 1 && this.agents.civ[id] === civ.id) {
+          hasCitizen = true;
+          break;
+        }
+      }
+      if (!hasCitizen) eliminateCiv(this, civ);
+    }
   }
 }

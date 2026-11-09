@@ -10,6 +10,12 @@ import {
   settlementTier,
 } from '../config';
 import { personalName } from '../sim/names';
+import {
+  settlementCenters,
+  settlementName,
+  settlementStats,
+  totalBuildingCapacity,
+} from '../sim/settlements';
 import type { Game } from '../sim/game';
 import type { PowerId } from '../sim/powers';
 import {
@@ -19,6 +25,7 @@ import {
   type ChronicleKind,
 } from '../world/types';
 import { escapeHtml, formatNumber, formatYear, qs } from './dom';
+import { buildVersionLabel } from './build-info';
 import { POWER_META, POWER_ORDER } from './power-meta';
 
 export type InspectorSelection =
@@ -151,7 +158,7 @@ export class Hud {
 
     this.root.innerHTML = `
       <header class="topbar">
-        <div class="brand"><span class="brand-mark">◇</span><span>Worldsmith <span class="game-version">${escapeHtml(__COMMIT_HASH__)} · built ${escapeHtml(__BUILD_DATE__)}</span></span></div>
+        <div class="brand"><span class="brand-mark">◇</span><span>Worldsmith <span class="game-version">${escapeHtml(buildVersionLabel())}</span></span></div>
         <div class="world-meta">
           <span class="world-name" id="world-name">The Unnamed World</span>
           <span class="world-year" id="year-label">Year 1</span>
@@ -570,6 +577,24 @@ export class Hud {
       if (building.civ !== civ.id || !building.built) continue;
       buildingCounts.set(building.type, (buildingCounts.get(building.type) ?? 0) + 1);
     }
+    const centers = settlementCenters(game, civ.id);
+    const cityCount = centers.length;
+    const capacity = totalBuildingCapacity(game, civ);
+    const settlementsHtml =
+      centers.length === 0
+        ? '<span class="muted">No standing town centre.</span>'
+        : centers
+            .map((center) => {
+              const stats = settlementStats(game, civ.id, center, centers);
+              const isCapital = center.x === civ.centerX && center.y === civ.centerY;
+              return `
+                <div class="settlement-row">
+                  <span class="settlement-name">${escapeHtml(settlementName(game, civ.id, center))}${isCapital ? '<span class="save-tag">CAPITAL</span>' : ''}</span>
+                  <span class="muted small-text">${stats.residents}/${stats.housing} pop · ${stats.buildings} bldg</span>
+                  <button type="button" class="ghost-button small" data-center-civ data-x="${center.x}" data-y="${center.y}">Center</button>
+                </div>`;
+            })
+            .join('');
     const buildingHtml =
       buildingCounts.size === 0
         ? '<span class="muted">Nothing built yet.</span>'
@@ -601,7 +626,7 @@ export class Hud {
         <span class="civ-swatch" style="background:${color}"></span>
         <div class="civ-head-text">
           <div class="civ-title">${escapeHtml(civ.name)}</div>
-          <div class="civ-subtitle">${eraLabel} era · ${tier.name} · ${escapeHtml(civ.religion)}${civ.alive ? '' : ' · FALLEN'}</div>
+          <div class="civ-subtitle">${eraLabel} era · ${tier.name} · ${cityCount} ${cityCount === 1 ? 'city' : 'cities'} · ${escapeHtml(civ.religion)}${civ.alive ? '' : ' · FALLEN'}</div>
         </div>
         <button type="button" class="panel-close" data-close-civ aria-label="Close faction panel">×</button>
       </div>
@@ -612,10 +637,12 @@ export class Hud {
         <div><span class="stat-label">Happiness</span><span class="stat-value">${Math.round(civ.happiness)}</span></div>
       </div>
       <div class="stat-row"><span>Food</span><span>${Math.round(civ.food)} <span class="muted">+${civ.foodProduction.toFixed(1)}/yr</span></span></div>
+      ${civ.foodShortage > 0 ? `<div class="stat-row warning"><span>Food shortage</span><span>-${Math.round(civ.foodShortage)}/yr</span></div>` : ''}
       <div class="stat-row"><span>Materials</span><span>${Math.round(civ.materials)}</span></div>
       <div class="stat-row"><span>Wealth</span><span>${Math.round(civ.wealth)}</span></div>
       <div class="stat-row"><span>Knowledge</span><span>${Math.round(civ.knowledge)}</span></div>
       <div class="stat-row"><span>Faith</span><span>${Math.round(civ.faith)}</span></div>${bar(civ.faith / 100, '#d9b3ff')}
+      <div class="stat-row"><span>Settlements</span><span>${cityCount} · ${civ.buildings}/${capacity > 0 ? capacity : civ.buildings} buildings</span></div>
       <div class="era-block">
         <div class="stat-row"><span>${civ.era >= 3 ? 'Era' : `Next era · ${nextEraLabel}`}</span><span>${civ.era >= 3 ? 'Zenith reached' : `${Math.round(civ.knowledge)} / ${eraKnowledge} knowledge`}</span></div>
         ${bar(knowledgeRatio, '#9ad0e8')}
@@ -625,7 +652,9 @@ export class Hud {
       <div class="trait-list">${traits
         .map((trait) => `<span class="trait-chip" title="${escapeHtml(trait.description)}">${escapeHtml(trait.name)}</span>`)
         .join('')}</div>
-      <div class="section-title">BUILDINGS · ${civ.buildings}/${SETTLEMENT_TIERS[settlementTier(civ.population)].maxBuildings}</div>
+      <div class="section-title">SETTLEMENTS</div>
+      <div class="settlement-list">${settlementsHtml}</div>
+      <div class="section-title">BUILDINGS · ${civ.buildings}/${capacity > 0 ? capacity : civ.buildings}</div>
       <div class="building-list">${buildingHtml}</div>
       <div class="section-title">RELATIONS</div>
       <div class="relations-list">${relations || '<span class="muted">No other factions remain.</span>'}</div>

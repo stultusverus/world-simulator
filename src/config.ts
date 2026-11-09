@@ -43,7 +43,9 @@ export const CHRONICLE_LIMIT = 600;
 
 export const FOOD_PER_PERSON = 0.6;
 export const STARVATION_HEALTH_LOSS = 10;
-export const BIRTH_BASE_CHANCE = 0.16;
+export const BIRTH_BASE_CHANCE = 0.22;
+/** Upper bound on births per faction per tick; keeps large cities growing. */
+export const MAX_BIRTHS_PER_TICK = 8;
 export const SOLDIER_UPKEEP_WEALTH = 0.25;
 
 export const SEA_LEVEL = 0.44;
@@ -64,6 +66,7 @@ export const SETTLEMENT_TIERS = [
   { name: 'Village', minPop: 10, radius: 6, maxBuildings: 18 },
   { name: 'Town', minPop: 30, radius: 8, maxBuildings: 32 },
   { name: 'City', minPop: 80, radius: 11, maxBuildings: 46 },
+  { name: 'Metropolis', minPop: 180, radius: 14, maxBuildings: 110 },
 ] as const;
 
 export function settlementTier(population: number): number {
@@ -73,6 +76,22 @@ export function settlementTier(population: number): number {
   }
   return tier;
 }
+
+/** Maximum number of AI-founded settlements a single faction may hold. */
+export const MAX_SETTLEMENTS_PER_CIV = 4;
+/** Material cost of founding a new settlement. */
+export const NEW_SETTLEMENT_COST = 120;
+/** Population required per existing settlement before another may be founded. */
+export const NEW_SETTLEMENT_MIN_POP = 300;
+/** Distance range in tiles between an existing centre and a new settlement. */
+export const NEW_SETTLEMENT_MIN_GAP = 16;
+export const NEW_SETTLEMENT_MAX_GAP = 26;
+/** A* node budget for a cross-water route search. */
+export const SEA_PATH_NODES = 10_000;
+/** Number of coastal candidates considered when planning a crossing. */
+export const MAX_COAST_CANDIDATES = 6;
+/** War duration in ticks when the two capitals are on different land regions. */
+export const NAVAL_WAR_TICKS = 105;
 
 export const ERA_NAMES = ['Hearth', 'Craft', 'Engine', 'Zenith'] as const;
 
@@ -192,7 +211,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     workers: 0,
     housing: 0,
     era: Era.Hearth,
-    armySlots: 4,
+    armySlots: 6,
     faith: 0,
     produces: {},
   },

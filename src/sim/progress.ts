@@ -54,7 +54,7 @@ export function runProgress(game: Game): void {
     const zealous = civ.traits.includes('zealous') ? 10 : 0;
     civ.faith = Math.max(0, Math.min(100, 6 + civ.piety + temples * 14 + priests * 2.5 + civ.era * 4 + zealous));
 
-    for (const milestone of [25, 50, 100, 180]) {
+    for (const milestone of [25, 50, 100, 180, 300, 500]) {
       if (civ.population >= milestone && civ.maxPopulation < milestone) {
         civ.maxPopulation = milestone;
         game.addChronicle(

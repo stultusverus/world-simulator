@@ -127,4 +127,28 @@ describe('save menu persistence feedback', () => {
     ));
     expect(list.innerHTML).toContain('Load');
   });
+
+  it('refreshes the autosave row while the menu is open', async () => {
+    vi.stubGlobal('indexedDB', undefined);
+    const storage = await import('../src/persist/storage');
+    const { SaveMenu } = await import('../src/ui/save-menu');
+    const { root, elements } = menuRoot();
+    const base = { ...save, savedAt: 1000, world: { ...save.world, tick: 1 } };
+    const later = { ...save, savedAt: 2000, world: { ...save.world, tick: 42 } };
+    await storage.saveToSlot('autosave', base);
+    const menu = new SaveMenu(root, { getGame: () => null, onLoad: vi.fn(), onToast: vi.fn() });
+    await menu.show();
+    const list = elements.get('#save-slots')!;
+    expect(list.innerHTML).toContain('Year 1');
+
+    await storage.saveToSlot('autosave', later);
+    menu.refreshIfOpen();
+    await vi.waitFor(() => expect(list.innerHTML).toContain('Year 42'));
+
+    menu.hide();
+    await storage.saveToSlot('autosave', { ...base, savedAt: 3000, world: { ...base.world, tick: 7 } });
+    menu.refreshIfOpen();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(list.innerHTML).toContain('Year 42');
+  });
 });

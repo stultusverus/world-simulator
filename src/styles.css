@@ -722,6 +722,11 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.stat-row.warning,
+.stat-row.warning span:last-child {
+  color: #e07a6f;
+}
+
 .meter {
   display: block;
   height: 3px;
@@ -888,6 +893,35 @@ input:focus-visible {
 .chip-count {
   color: var(--accent);
   font-size: 9px;
+}
+
+.settlement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settlement-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settlement-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #eef2f4;
+}
+
+.settlement-name .save-tag {
+  font-size: 7px;
 }
 
 .relations-list {

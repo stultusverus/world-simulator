@@ -201,6 +201,13 @@ function drawUnit(ctx: CanvasRenderingContext2D, ox: number, oy: number, color: 
     px(ctx, ox + 12, oy + 2, 1, 16, '#c9c2b2');
     px(ctx, ox + 11, oy + 1, 3, 2, '#9a9386');
     px(ctx, ox + 4, oy + 2, 6, 1, '#5a5a5a');
+  } else if (job === Job.Laborer) {
+    // A bundle of gathered goods over one shoulder.
+    px(ctx, ox + 4, oy + 8, 8, 6, shade(body, -14));
+    px(ctx, ox + 11, oy + 5, 5, 6, '#8a6a45');
+    px(ctx, ox + 12, oy + 4, 3, 2, '#c9b28a');
+    px(ctx, ox + 10, oy + 7, 1, 9, '#5a3f27');
+    px(ctx, ox + 3, oy + 10, 2, 4, '#7a5636');
   }
   // Tiny equipment speckle for life.
   if (rng.chance(0.4)) px(ctx, ox + 10, oy + 11, 1, 1, shade(body, 30));
@@ -328,6 +335,58 @@ function drawBuildings(ctx: CanvasRenderingContext2D, ox: number, oy: number, ty
     px(ctx, ox + 12, oy + 28, 5, 5, '#2f241b');
     px(ctx, ox + 14, oy + 30, 1, 1, gold);
     px(ctx, ox + 30, oy + 34, 8, 2, '#3a2f26');
+  } else if (type === BuildingType.Market) {
+    px(ctx, ox + 5, oy + 40, 38, 3, 'rgba(0,0,0,0.22)');
+    px(ctx, ox + 6, oy + 32, 36, 9, woodDark);
+    px(ctx, ox + 7, oy + 33, 34, 7, '#9a7a50');
+    // Three stalls with coloured awnings.
+    for (const [sx, top] of [[9, 18], [20, 14], [31, 20]] as const) {
+      px(ctx, ox + sx, oy + top + 8, 2, 22, wood);
+      px(ctx, ox + sx + 6, oy + top + 8, 2, 22, wood);
+      px(ctx, ox + sx, oy + top + 11, 8, 4, wood);
+      px(ctx, ox + sx - 1, oy + top + 8, 10, 3, roofDark);
+      px(ctx, ox + sx, oy + top + 7, 8, 3, roof);
+      px(ctx, ox + sx + 1, oy + top + 14, 3, 4, '#c9b28a');
+    }
+    // Crates and a coin strongbox.
+    px(ctx, ox + 9, oy + 29, 7, 5, '#7a5636');
+    px(ctx, ox + 10, oy + 30, 5, 1, '#c9b28a');
+    px(ctx, ox + 33, oy + 28, 6, 6, '#6f5a3a');
+    px(ctx, ox + 34, oy + 27, 4, 2, gold);
+    px(ctx, ox + 23, oy + 35, 4, 4, gold);
+  } else if (type === BuildingType.University) {
+    px(ctx, ox + 5, oy + 40, 38, 3, 'rgba(0,0,0,0.22)');
+    px(ctx, ox + 7, oy + 30, 34, 11, stoneDark);
+    px(ctx, ox + 9, oy + 28, 30, 8, stone);
+    for (const cx of [11, 18, 25, 32]) {
+      px(ctx, ox + cx, oy + 17, 3, 13, '#cfc8bb');
+      px(ctx, ox + cx, oy + 17, 1, 13, stoneDark);
+    }
+    px(ctx, ox + 8, oy + 15, 32, 3, stoneDark);
+    px(ctx, ox + 13, oy + 7, 22, 9, roof);
+    px(ctx, ox + 15, oy + 5, 18, 5, shade(roof, 12));
+    px(ctx, ox + 23, oy - 2, 2, 8, stoneDark);
+    px(ctx, ox + 25, oy - 2, 5, 3, gold);
+    px(ctx, ox + 21, oy + 20, 6, 10, '#3a2b21');
+    px(ctx, ox + 12, oy + 31, 4, 4, gold);
+    px(ctx, ox + 32, oy + 31, 4, 4, gold);
+  } else if (type === BuildingType.Monument) {
+    px(ctx, ox + 6, oy + 40, 36, 3, 'rgba(0,0,0,0.25)');
+    px(ctx, ox + 9, oy + 34, 30, 8, stoneDark);
+    px(ctx, ox + 11, oy + 33, 26, 5, stone);
+    px(ctx, ox + 9, oy + 38, 30, 2, stoneDark);
+    // Tapered obelisk.
+    for (let row = 0; row < 24; row += 1) {
+      const width = 6 - Math.floor(row / 6);
+      px(ctx, ox + 24 - Math.floor(width / 2), oy + 9 + row, width, 1, row < 3 ? '#cfc8bb' : stone);
+      px(ctx, ox + 24 - Math.floor(width / 2), oy + 9 + row, 1, 1, stoneDark);
+    }
+    px(ctx, ox + 22, oy + 3, 4, 6, '#cfc8bb');
+    px(ctx, ox + 23, oy, 2, 4, gold);
+    px(ctx, ox + 15, oy + 29, 18, 2, roofDark);
+    px(ctx, ox + 15, oy + 29, 18, 1, roof);
+    px(ctx, ox + 13, oy + 36, 3, 3, gold);
+    px(ctx, ox + 32, oy + 36, 3, 3, gold);
   }
 }
 
@@ -367,11 +426,11 @@ export class SpriteAtlas {
       }
     }
 
-    this.units = makeCanvas(8 * 16, 6 * 20);
+    this.units = makeCanvas(8 * 16, 7 * 20);
     const unitCtx = this.units.getContext('2d');
     if (unitCtx) {
       for (let color = 0; color < 8; color += 1) {
-        for (let job = 0; job < 6; job += 1) {
+        for (let job = 0; job < 7; job += 1) {
           unitCtx.save();
           unitCtx.translate(color * 16, job * 20);
           drawUnit(unitCtx, 0, 0, COLORS[color], job as Job, color + job * 3);
@@ -397,10 +456,10 @@ export class SpriteAtlas {
       }
     }
 
-    this.buildings = makeCanvas(8 * 48, 6 * 48);
+    this.buildings = makeCanvas(8 * 48, 9 * 48);
     const buildingCtx = this.buildings.getContext('2d');
     if (buildingCtx) {
-      for (let type = 0; type < 6; type += 1) {
+      for (let type = 0; type < 9; type += 1) {
         for (let color = 0; color < 8; color += 1) {
           buildingCtx.save();
           buildingCtx.translate(color * 48, type * 48);

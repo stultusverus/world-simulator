@@ -94,7 +94,9 @@ export function recomputeOwnership(
   });
   for (const building of ordered) {
     const civRadius = radiusForCiv(building.civ);
-    const r = building.type === 0 ? civRadius : Math.max(2, civRadius - 2);
+    // City centres anchor territory; outlying buildings only claim their own
+    // tile neighbourhood so many settlements stay cheap to refresh.
+    const r = building.type === 0 ? civRadius : 2;
     const r2 = r * r;
     for (let dy = -r; dy <= r; dy += 1) {
       for (let dx = -r; dx <= r; dx += 1) {

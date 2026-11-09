@@ -3,6 +3,7 @@ import { BuildingType, type Civ, type TraitId } from '../world/types';
 import { tryFindWalkableNear } from '../world/world';
 import type { Game } from './game';
 import { makeFactionName, makeReligionName } from './names';
+import { settlementCenters } from './settlements';
 
 export interface FoundFactionOptions {
   initial?: boolean;
@@ -25,8 +26,15 @@ export function foundFaction(game: Game, xIn: number, yIn: number, options: Foun
   if (!site) return null;
 
   if (!options.initial) {
+    // Space new factions away from every existing settlement, not just the
+    // other faction's oldest centre.
     for (const other of game.aliveCivs()) {
-      if (Math.hypot(other.centerX - site.x, other.centerY - site.y) < 26) return null;
+      const centers = settlementCenters(game, other.id);
+      const candidates =
+        centers.length > 0 ? centers : [{ x: other.centerX, y: other.centerY }];
+      for (const center of candidates) {
+        if (Math.hypot(center.x - site.x, center.y - site.y) < 26) return null;
+      }
     }
   }
 

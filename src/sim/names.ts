@@ -50,6 +50,11 @@ const FAMILY_NAMES = [
   'Thorn', 'Umber', 'Vane', 'Wold', 'Yarrow',
 ];
 
+const SETTLEMENT_SUFFIX = [
+  'ford', 'bridge', 'gate', 'field', 'stead', 'holm', 'wick', 'well',
+  'bury', 'crest', 'mere', 'cross', 'hearth', 'rest',
+];
+
 export function makeWorldName(seedText: string): string {
   const rng = new RNG(hashString(`${seedText}:world`));
   return `The ${rng.pick(WORLD_ADJ)} ${rng.pick(WORLD_NOUN)}`;
@@ -75,6 +80,18 @@ export function makeFactionName(seedText: string, index: number, used: ReadonlyS
 export function makeReligionName(seedText: string, index: number): string {
   const rng = new RNG(hashString(`${seedText}:faith:${index}`));
   return `The ${rng.pick(RELIGION_ADJ)} ${rng.pick(RELIGION_NOUN)}`;
+}
+
+/** Deterministic settlement name derived from the civ and its town-centre id. */
+export function makeSettlementName(seedText: string, civId: number, townCenterId: number): string {
+  const rng = new RNG(hashString(`${seedText}:settlement:${civId}:${townCenterId}`));
+  const prefix = rng.pick(FACTION_PREFIX);
+  let suffix = rng.pick(SETTLEMENT_SUFFIX);
+  if (/[aeiou]$/i.test(prefix) && /^[aeiou]/i.test(suffix)) {
+    suffix = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+  }
+  const base = `${prefix}${suffix}`;
+  return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
 export function personalName(seedText: string, agentId: number, gender: number): string {

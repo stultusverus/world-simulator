@@ -1,5 +1,10 @@
+import { NAVAL_WAR_TICKS } from '../config';
+import { differentWalkRegions } from '../world/regions';
 import { AgentState, BuildingType, Job, type Building, type Civ, type War } from '../world/types';
+import { makeSettlementName } from './names';
+import { findNavalRoute } from './naval';
 import { findPath } from './pathfind';
+import { ensureCivCenter, nearestCenter, settlementCenters } from './settlements';
 import type { Game } from './game';
 
 const ENGAGE_RANGE = 2.1;
@@ -204,16 +209,20 @@ function act(
   }
 
   agents.state[id] = AgentState.Marching;
-  moveToward(game, id, targetX, targetY, MOVE_SPEED, target.id);
+  moveToward(game, id, target, MOVE_SPEED);
 }
 
-function moveToward(game: Game, id: number, tx: number, ty: number, speed: number, targetKey: number): void {
+function moveToward(game: Game, id: number, target: Building, speed: number): void {
   const agents = game.agents;
+  const targetKey = target.id;
+  const tx = target.x + 0.5;
+  const ty = target.y + 0.5;
   let path = game.soldierPaths.get(id);
   if (!path || path.targetKey !== targetKey || path.index >= path.path.length) {
     const failures = failedRoutes.get(game);
     if (failures && game.world.tick < (failures.get(targetKey) ?? 0)) return;
-    const found = findPath(
+    // Land routes first; soldiers on another landmass fall back to a crossing.
+    let route = findPath(
       game.world,
       Math.floor(agents.x[id]),
       Math.floor(agents.y[id]),
@@ -221,7 +230,8 @@ function moveToward(game: Game, id: number, tx: number, ty: number, speed: numbe
       Math.floor(ty),
       SOLDIER_PATH_NODES,
     );
-    if (!found || found.length === 0) {
+    if (!route || route.length === 0) route = findNavalRoute(game, id, target, targetKey);
+    if (!route || route.length === 0) {
       // Retry on a later tick, not once per soldier per tick.
       const retryMap = failures ?? new Map<number, number>();
       retryMap.set(targetKey, game.world.tick + 1);
@@ -229,7 +239,7 @@ function moveToward(game: Game, id: number, tx: number, ty: number, speed: numbe
       game.soldierPaths.delete(id);
       return;
     }
-    path = { path: found, index: 0, targetKey };
+    path = { path: route, index: 0, targetKey };
     game.soldierPaths.set(id, path);
   }
 
@@ -309,15 +319,40 @@ function destroyBuilding(
   const attackerIsA = war.a === attacker.id;
   if (attackerIsA) war.razedA += 1;
   else war.razedB += 1;
-  if (building.type === BuildingType.TownCenter) {
-    game.addChronicle(
-      'war',
-      `${attacker.name} raze the Town Center of ${defender.name}.`,
-      attacker.id,
-      building.x,
-      building.y,
-    );
-  } else if ((attackerIsA ? war.razedA : war.razedB) === 1) {
+  const wasCenter = building.type === BuildingType.TownCenter;
+  if (wasCenter) game.navalPlans.clear();
+  const remaining = game.buildings.filter((b) => b.civ === defender.id);
+  const remainingCenters = settlementCenters(game, defender.id);
+  if (wasCenter) {
+    if (remainingCenters.length > 0 && remaining.length > 0) {
+      // The faction survives through its other settlements: move the anchor and
+      // name the town that was lost.
+      ensureCivCenter(game, defender);
+      const lost = makeSettlementName(game.world.seedText, defender.id, building.id);
+      game.addChronicle(
+        'war',
+        `${attacker.name} raze ${lost}, the Town Center of ${defender.name}.`,
+        attacker.id,
+        building.x,
+        building.y,
+      );
+    } else {
+      game.addChronicle(
+        'war',
+        `${attacker.name} raze the Town Center of ${defender.name}.`,
+        attacker.id,
+        building.x,
+        building.y,
+      );
+      eliminateCiv(game, defender);
+    }
+    return;
+  }
+  if (remaining.length === 0) {
+    eliminateCiv(game, defender);
+    return;
+  }
+  if ((attackerIsA ? war.razedA : war.razedB) === 1) {
     game.addChronicle(
       'war',
       `${attacker.name} begin razing the settlements of ${defender.name}.`,
@@ -325,10 +360,6 @@ function destroyBuilding(
       building.x,
       building.y,
     );
-  }
-  const remaining = game.buildings.filter((b) => b.civ === defender.id);
-  if (building.type === BuildingType.TownCenter || remaining.length === 0) {
-    eliminateCiv(game, defender);
   }
 }
 
@@ -363,7 +394,9 @@ function checkPeace(game: Game, war: War): void {
     return;
   }
   const duration = game.world.tick - war.startTick;
-  if (duration > 60) {
+  const crossing = differentWalkRegions(game.reachability, game.world, a.centerX, a.centerY, b.centerX, b.centerY);
+  // Cross-water campaigns need time for the army to embark, sail and land.
+  if (duration > (crossing ? NAVAL_WAR_TICKS : 60)) {
     endWar(game, war, 'peace');
     return;
   }
@@ -382,9 +415,7 @@ function returnSoldiers(game: Game): void {
     if (agents.alive[id] === 0 || agents.state[id] !== AgentState.Returning) continue;
     const civ = game.civs[agents.civ[id]];
     if (!civ?.alive) continue;
-    const center = game.buildings.find(
-      (building) => building.civ === civ.id && building.built && building.type === BuildingType.TownCenter,
-    );
+    const center = nearestCenter(game, civ.id, agents.x[id], agents.y[id]);
     if (!center) {
       agents.state[id] = AgentState.Idle;
       game.soldierPaths.delete(id);
@@ -396,6 +427,6 @@ function returnSoldiers(game: Game): void {
       game.soldierPaths.delete(id);
       continue;
     }
-    moveToward(game, id, center.x + 0.5, center.y + 0.5, MOVE_SPEED, center.id);
+    moveToward(game, id, center, MOVE_SPEED);
   }
 }

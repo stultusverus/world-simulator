@@ -1,11 +1,14 @@
 import {
   BUILDING_DEFS,
   FOOD_PER_PERSON,
-  SETTLEMENT_TIERS,
   SOLDIER_UPKEEP_WEALTH,
-  settlementTier,
 } from '../config';
 import { BuildingType, Job, type Building, type Civ } from '../world/types';
+import {
+  pickConstructionCenter,
+  settlementCenters,
+  totalBuildingCapacity,
+} from './settlements';
 import type { Game } from './game';
 
 function countJob(game: Game, civId: number, job: Job): number {
@@ -16,14 +19,6 @@ function countJob(game: Game, civId: number, job: Job): number {
   }
   return count;
 }
-
-const BUILDING_ORDER = [
-  BuildingType.House,
-  BuildingType.Farm,
-  BuildingType.Workshop,
-  BuildingType.Temple,
-  BuildingType.Barracks,
-];
 
 function builtCount(built: readonly Building[], type: BuildingType): number {
   let count = 0;
@@ -146,46 +141,69 @@ function progressConstruction(game: Game, civ: Civ, builders: number): void {
   }
 }
 
+/**
+ * Picks a new building to construct around one of the faction's town centres.
+ * The combined capacity of every settlement caps total buildings, and each
+ * settlement's tier caps its own building count.
+ */
 function planConstruction(game: Game, civ: Civ): void {
   const buildings = game.buildings.filter((building) => building.civ === civ.id);
   if (buildings.some((building) => !building.built)) return;
   const built = buildings.filter((building) => building.built);
-  const tier = settlementTier(civ.population);
-  if (buildings.length >= SETTLEMENT_TIERS[tier].maxBuildings) return;
+  if (buildings.length >= totalBuildingCapacity(game, civ)) return;
 
   const type = chooseBuildingType(civ, built);
   if (type === null) return;
   const def = BUILDING_DEFS[type];
   if (civ.era < def.era) return;
   if (civ.materials < def.cost) return;
-  const spot = game.findBuildingSpot(civ, type, 2);
+
+  const primary = pickConstructionCenter(game, civ);
+  if (!primary) return;
+  const centers = settlementCenters(game, civ.id);
+  let spot = game.findBuildingSpot(civ, type, 2, undefined, { x: primary.x, y: primary.y });
+  if (!spot) {
+    for (const center of centers) {
+      if (center.id === primary.id) continue;
+      spot = game.findBuildingSpot(civ, type, 2, undefined, { x: center.x, y: center.y });
+      if (spot) break;
+    }
+  }
   if (!spot) return;
 
   civ.materials -= def.cost;
   game.addBuilding(civ.id, type, spot.x, spot.y, false);
 }
 
-function chooseBuildingType(civ: Civ, built: readonly Building[]): BuildingType | null {
+/** Exposed for tests: which building the faction should try to construct next. */
+export function chooseBuildingType(civ: Civ, built: readonly Building[]): BuildingType | null {
   const foodRatio = civ.foodProduction / Math.max(1, civ.foodNeed);
-  if (foodRatio < 1.15 && builtCount(built, BuildingType.Farm) < 9) return BuildingType.Farm;
+  const farmTarget = Math.max(9, Math.ceil(civ.population / 18));
+  if (foodRatio < 1.15 && builtCount(built, BuildingType.Farm) < farmTarget) {
+    return BuildingType.Farm;
+  }
   if (builtCount(built, BuildingType.Barracks) === 0 && civ.population >= 10) {
     return BuildingType.Barracks;
   }
   if (civ.housing - civ.population <= 2) return BuildingType.House;
-  if (civ.era >= 1 && builtCount(built, BuildingType.Workshop) < 1 + Math.floor(civ.population / 40)) {
+  if (
+    civ.era >= 1 &&
+    builtCount(built, BuildingType.Workshop) <
+      Math.min(9, 1 + Math.floor(civ.population / 60))
+  ) {
     return BuildingType.Workshop;
   }
-  if (civ.era >= 1 && builtCount(built, BuildingType.Temple) < 1 + Math.floor(civ.population / 55)) {
+  if (
+    civ.era >= 1 &&
+    builtCount(built, BuildingType.Temple) <
+      Math.min(5, 1 + Math.floor(civ.population / 100))
+  ) {
     return BuildingType.Temple;
   }
   if (builtCount(built, BuildingType.Barracks) < (civ.warId >= 0 ? 2 : 1) && civ.population >= 9) {
     return BuildingType.Barracks;
   }
-  if (civ.materials > 45 && civ.population >= 14) {
-    for (const type of BUILDING_ORDER) {
-      if (civ.era < BUILDING_DEFS[type].era) continue;
-      return type;
-    }
-  }
+  // No construction need left: stop building rather than filling a city with
+  // empty houses. New settlements are founded once the city is genuinely full.
   return null;
 }

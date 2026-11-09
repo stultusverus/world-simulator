@@ -3,8 +3,8 @@
 > **Living document.** Update this file instead of replacing it when scope, status or
 > priorities change. Last updated: **2026-11-09**.
 >
-> **Code baseline:** `80cdd95` (local `main`). **Remote baseline:** `63a236a`
-> (`origin/main`). Local `main` has one unpushed code fix on top of remote.
+> **Code baseline:** `850f5ab` (`main` == `origin/main`). **Iteration branch:**
+> `feat/navies-settlements-hardening` (PR pending; no merge or deploy).
 
 ## 1. Product goal
 
@@ -26,7 +26,7 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | Time | Real-time; pause; 1× / 2× / 5×; one tick = one game year |
 | Deep systems | Civs & settlements · individual agents/families/jobs · food/resources/economy · war/diplomacy · eras/culture/religion |
 | Terrain | Procedural terrain, biomes, rivers, light wildlife |
-| War | Agent armies that march, skirmish and siege |
+| War | Agent armies that march, sail, skirmish and siege; AI wars gated by land/coastal reachability |
 | MVP powers | Spawn faction/settlers/deer/wolves; Heal/Fertility/Peace/Insight |
 | Start | Pre-seeded with three factions, with optional empty wilderness |
 | Presentation | Cosmetic day/night tint; English UI; desktop-first mouse/keyboard |
@@ -39,6 +39,9 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
   fertility, rivers, spawn sites; deterministic per seed.
 - **Factions** — generated names/colours/traits; faction AI builds housing, farms,
   workshops, temples and barracks; territory and building caps by settlement tier.
+- **Cities & expansion** — Metropolis tier, population-scaled farm/workshop/temple
+  targets, settlement-aware civilian jobs and construction; up to four AI-founded
+  settlements per faction; losing one town centre no longer destroys the faction.
 - **People** — every villager is an agent with needs, health, hunger, happiness, faith,
   a home, a job, a partner and children; aging, births, marriages and death.
 - **Economy** — food, materials, wealth and knowledge; era multipliers; famine and
@@ -46,7 +49,8 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 - **Progress & culture** — Hearth/Craft/Engine/Zenith eras, culture traits, patron
   religions and spread between neighbours.
 - **Diplomacy & war** — relations drift and incidents, war declarations, soldier armies,
-  A* movement, skirmishes, sieges, building destruction, peace and faction collapse.
+  land A* movement, cross-water ferry crossings, skirmishes, sieges, building
+  destruction, peace and faction collapse. Unreachable factions cannot declare war.
 - **Wildlife** — deer and wolf populations with grazing, hunting and reproduction.
 - **Powers** — spawning tools and four blessings with radius brush, cooldowns, effects,
   toasts and chronicle entries.
@@ -55,7 +59,7 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 - **Persistence** — deterministic save/load including RNG state and soldier routes;
   autosave; manual slots; persistent/temporary storage status feedback.
 - **Rendering & performance** — procedural sprite atlas, chunk caching, overview
-  texture, territory overlay, cosmetic day/night, capital/label rendering.
+  texture, territory overlay, cosmetic day/night, capital and settlement labels, boats.
 - **Ops** — Cloudflare Workers static-assets config, deploy script, commit/build
   metadata in the game header, dev server on `0.0.0.0`.
 
@@ -70,38 +74,41 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | 5 | Integrate remote fixes: workshop staffing, construction labour, soldier paths, storage status, saved speed, header/deploy | ✅ Done | `63a236a`; 44 upstream tests |
 | 6 | Review-found war retry throttle | ✅ Done | `80cdd95`; 45 tests; 1024 pacing test 4.3 s → 1.1 s |
 | 7 | AGENTS.md & PLAN.md tracking | ✅ Done | This document |
+| 8 | Naval transport, Metropolis + multi-settlement growth, saves refresh, build-metadata safety, docs | ✅ Done | `feat/navies-settlements-hardening`; 78 tests; browser QA |
 
 ## 5. Verification snapshot
 
-As of **2026-11-09** (local code base `80cdd95`):
+As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f5ab`):
 
 - `npm install` completed; `@types/node` and `wrangler` present.
 - `npm run typecheck` — pass.
-- `npm test` — **45/45 pass** across 10 test files.
-- `npm run build` — pass; production `dist/` generated.
-- Browser checks — header commit/build label, save at 5× → restore 5×, persistent
-  storage notice, save slots, resume, no console errors.
-- Dev server — `http://127.0.0.1:5173/` and network IP; responsive.
-- Deployment config — `wrangler deploy --dry-run` reads all four `dist/` assets; no
-  production deploy executed.
-- Performance — ~57–60 fps in headless Chromium at 1024² with several hundred agents;
-  failed-route war retries are throttled per target per tick.
+- `npm test` — **78/78 pass** across 15 test files (~12 s).
+- `npm run build` — pass; production `dist/` generated (39 modules, ~137 kB JS).
+- Browser checks at 1280×800 — creation, 512²/1024² growth runs, Metropolis and
+  three-city faction panel, settlement labels, boat rendering, save slot → load,
+  live autosave row refresh while the Saves menu is open, old pre-change Slot I save
+  loads, no console errors.
+- Performance — 1024² at year 1401: **2,522 people / 9 cities / 626 buildings**, solid
+  **60 fps at 5×** zoomed out, **~1.6 ms/tick** simulation cost; 1,400 ticks in 3.6 s.
+  A 512² run reached 2,298 people across 9 cities by year 901.
+- Dev server — `http://127.0.0.1:5173/`; responsive; no replacement server started.
+- Deployment — not performed; Cloudflare remains unauthenticated.
+- CI — intentionally **not added** (explicit user request); all verification is local.
 
 ## 6. Short-term goals (next)
 
-- [ ] **Decide publishing:** push local `80cdd95` and deploy to Cloudflare, or keep the
-      review fix local. This is a user decision; no push/deploy has been done.
-- [ ] **Cross-water wars:** prevent declarations when capitals have no land route, or
-      introduce a deliberate naval/coastal transport mechanic. Today armies can stall
-      until peace; wars are cheap now but pointless.
-- [ ] **Saves menu freshness:** refresh the open menu when an autosave lands (currently
-      the autosave row can stay stale until the menu is reopened or an action occurs).
-- [ ] **CI:** add a GitHub Actions workflow running typecheck, tests and build.
-- [ ] **Build metadata test safety:** define `__COMMIT_HASH__`/`__BUILD_DATE__` for
-      Vitest or add a runtime fallback so the HUD can be imported in tests without mocks.
-- [ ] **Keep docs current:** refresh README screenshots after visible UI changes.
-- [ ] **Coverage:** add browser-level smoke tests for the creation → play → save → load
-      flow if the hosting environment supports automation.
+- [x] **Publishing:** iteration delivered on a feature branch with a PR; merge and
+      Cloudflare deploy remain explicit user decisions.
+- [x] **Cross-water wars:** armies auto-ferry across water and AI declarations are
+      gated by land/coastal reachability; cross-water wars get a longer duration.
+- [x] **Saves menu freshness:** an open Saves menu refreshes when an autosave lands.
+- [ ] **CI:** explicitly deferred by user request — do not add a workflow unless asked.
+- [x] **Build metadata test safety:** `__COMMIT_HASH__`/`__BUILD_DATE__` are defined
+      for Vitest; header rendering is covered by `tests/build-info.test.ts`.
+- [x] **Keep docs current:** README screenshots, PLAN status, AGENTS constraints.
+- [ ] **Automated browser smoke tests:** manual browser QA performed; automation
+      (e.g. Playwright) still deferred.
+- [ ] **Deploy after approval:** needs Cloudflare credentials and explicit permission.
 
 ## 7. Long-term goals
 
@@ -114,7 +121,7 @@ As of **2026-11-09** (local code base `80cdd95`):
 
 ### Gameplay depth
 
-- Naval transport/coastal expansion so cross-water wars can actually be fought.
+- Coastal expansion beyond armies: civilian sea migration and overseas settlements.
 - Alliances, trade routes, coalitions and richer peace terms.
 - Deeper technology trees, wonders, more culture/religion events.
 - Balance and pacing work across all three world sizes; more meaningful late-game.
@@ -131,10 +138,11 @@ As of **2026-11-09** (local code base `80cdd95`):
 
 | Issue | Impact | Next step |
 |---|---|---|
-| Cross-water wars can be declared but armies cannot arrive | Wars end by duration; wasted simulation cycles | Reachability gate or navies |
-| Open Saves menu does not refresh autosave row | Stale display while modal stays open | Refresh on autosave or poll |
-| Build metadata constants are Vite-only | Importing HUD in Vitest without mocks would throw | Define in Vitest or add fallback |
-| Production deployment not performed | Cloudflare config only dry-run validated | Needs credentials + explicit approval |
+| No civilian sea migration or overseas settlements | New cities must be on the same landmass; navies are military-only | Future coastal expansion/colony mechanic |
+| Settlement founding is AI-only | Players cannot directly plant a city; factions expand on their own | Consider a "found settlement" power if requested |
+| Agent caps limit total population (1,200/2,500/4,000) | Very large worlds can hit the cap before every city fills | Profile and raise caps only if the target hardware allows |
+| Reachability/naval plans are derived, not serialized | Terrain-shape changes must call `refreshReachability()` | Keep future sculpting behind that hook |
+| Production deployment not performed | Cloudflare config validated locally only | Needs credentials + explicit approval |
 | Temporary IndexedDB fallback is session-only | Saves lost on reload/close | UI warns; expected for blocked storage |
 | Dev server binds `0.0.0.0` | Exposed to the container network | Intentional for access; restrict with `--host 127.0.0.1` if needed |
 | `@types/node` must be installed after pulling | Typecheck fails on stale `node_modules` | Documented; run `npm install` |
@@ -153,6 +161,18 @@ As of **2026-11-09** (local code base `80cdd95`):
   header build metadata, network dev binding, Cloudflare deploy config.
 - **2026-11-09 — review fix:** throttled failed soldier route searches per target per
   tick after finding a 1024² war-cost regression; no gameplay rule change.
+- **2026-11-09 — iteration scope:** naval transport + city growth + hardening on a
+  feature branch with a PR; **no CI** and no Playwright/review extras (explicit request).
+- **2026-11-09 — naval design:** auto-ferry armies (no ship control/building), derived
+  4-connected land/water regions, diplomacy gated by reachability, 105-tick cross-water
+  wars, procedural boat rendering; civilian sea migration deferred.
+- **2026-11-09 — city growth:** Metropolis tier (180 pop / radius 14 / 110 buildings),
+  population-scaled farm/workshop/temple targets, up to four AI settlements, local
+  settlement jobs, capital loss recentres instead of eliminating.
+- **2026-11-09 — saves:** `toSave` canonicalises the derived ownership map so load
+  reproduces exactly; reachability and naval caches are derived and never serialized.
+- **2026-11-09 — no CI:** explicitly excluded from this iteration; verification is
+  local commands plus browser QA.
 
 ## 10. How progress is tracked
 

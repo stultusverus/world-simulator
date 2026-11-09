@@ -41,15 +41,19 @@ the console. For simulation changes, also check save → load → continuation.
 
 - `src/config.ts` — all tuning: rates, caps, buildings, eras, traits, save version.
 - `src/core/` — seeded RNG and noise.
-- `src/world/` — world model, deterministic world generation, territory/ownership.
+- `src/world/` — world model, deterministic world generation, territory/ownership,
+  derived land/water connectivity regions (`regions.ts`).
 - `src/sim/game.ts` — `Game` orchestrator, tick order, snapshots, powers entry points.
 - `src/sim/agents.ts`, `economy.ts`, `war.ts`, `diplomacy.ts`, `progress.ts`,
-  `environment.ts`, `powers.ts`, `pathfind.ts` — simulation systems.
+  `settlements.ts`, `naval.ts`, `environment.ts`, `powers.ts`, `pathfind.ts` —
+  simulation systems.
 - `src/render/` — procedural sprite atlas, camera, chunked Canvas renderer.
-- `src/ui/` — creation screen, HUD/chronicle/civ panel, saves, help, power metadata.
+- `src/ui/` — creation screen, HUD/chronicle/civ panel, saves, help, power metadata,
+  build-info label.
 - `src/persist/` — IndexedDB storage with a temporary in-memory fallback.
 - `src/main.ts` — app wiring, input, fixed-step loop, autosave, debug API.
-- `tests/` — worldgen, simulation, war/pathfinding, powers, storage, save round-trip.
+- `tests/` — worldgen, simulation, war/pathfinding, naval, settlements/growth, powers,
+  storage, save round-trip.
 
 ## Invariants
 
@@ -61,31 +65,41 @@ the console. For simulation changes, also check save → load → continuation.
   reset speed inside `installGame`.
 - **Performance:** keep hot loops allocation-light; respect agent/wildlife caps and A*
   node budgets. Failed soldier route searches share a per-target retry throttle — do
-  not multiply A* searches by soldier count per tick.
+  not multiply A* searches by soldier count per tick. Naval crossing plans are cached per
+  target/region; keep them derived, not serialized.
+- **Derived state:** land/water reachability and naval plans are recomputed on load;
+  terrain-shape changes must call `refreshReachability()`. `toSave()` canonicalises the
+  derived ownership map so a save/load reproduces the exact territory.
 - **Rendering:** the HUD overlays an animating canvas. Avoid expensive `backdrop-filter`
   blurs on animated panels; chunk-cache terrain and reuse the 1 px/tile overview texture.
 - **Assets:** no external art, fonts, audio or network access at runtime.
 - **Build metadata:** `__COMMIT_HASH__` / `__BUILD_DATE__` are injected by
-  `vite.config.ts`. Tests that import the HUD must mock it or arrange for these
-  constants to be defined.
+  `vite.config.ts` and defined for Vitest in `vitest.config.ts`; the HUD can be imported
+  in tests without mocking them.
 
 ## Verification
 
-- `npm test` currently covers 45 checks. Keep it green.
+- `npm test` currently covers **78 checks** across 15 files. Keep it green.
 - Use `?debug=1` and the `window.__worldsmith` debug API
   (`startWorld`, `cast`, `save`, `load`, `speed`, `pause`, `stats`, `renderer`,
   `camera`) for browser verification.
 - Check gameplay flows, not only rendering: creation, empty-world start, powers, save
-  slots/autosave, resume, chronicle jump, and a war if you touched combat.
+  slots/autosave, resume, chronicle jump, a war if you touched combat, growth to a
+  Metropolis/multiple settlements, and a cross-water war if you touched navies.
 - The dev server is app-only at `:5173`; do not modify or replace the DSH Web GUI on
-  `:3080`.
+  `:3080`. CI is intentionally not configured; run the local commands above.
 
 ## Current known constraints
 
-- No navies: wars can still be declared between landmasses without a land route; armies
-  stall, and the war ends by duration. Reachability gate/naval transport is a follow-up.
-- The Saves menu does not live-refresh its autosave row while it stays open.
-- Deployment has only been validated with `wrangler deploy --dry-run`; no production
-  deployment has been performed.
+- Armies can sail between landmasses; civilians cannot migrate by sea and new
+  settlements must be founded on the same landmass.
+- Settlement founding is automatic AI expansion (up to four per faction); there is no
+  player "found city" power.
+- Global agent caps (1,200 / 2,500 / 4,000 by world size) remain the authoritative
+  population limit; very large worlds can hit the cap.
+- Land/water reachability and naval plans are derived from terrain; call
+  `Game.refreshReachability()` after any terrain-shape edit.
+- Deployment has only been validated locally; no production deployment has been
+  performed.
 - Browser storage may be unavailable; saves then fall back to session memory and the UI
   warns that they will be lost.

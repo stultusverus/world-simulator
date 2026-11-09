@@ -13,6 +13,11 @@ code.
 
 ![A city at 1024²](docs/screenshot-city.png)
 
+## Project docs
+
+- [PLAN.md](PLAN.md) — the living project plan: goals, milestones, status and roadmap.
+- [AGENTS.md](AGENTS.md) — conventions and commands for coding agents working here.
+
 ## Run it
 
 ```bash

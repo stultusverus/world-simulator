@@ -59,11 +59,13 @@ interface SettlementGroup {
   farms: Building[];
   workshops: Building[];
   temples: Building[];
+  /** Markets, universities and monuments; staffed by artisans (Job.Worker). */
+  civic: Building[];
   adults: number[];
 }
 
 function emptySettlementGroup(center: Building | null): SettlementGroup {
-  return { center, farms: [], workshops: [], temples: [], adults: [] };
+  return { center, farms: [], workshops: [], temples: [], civic: [], adults: [] };
 }
 
 /**
@@ -100,6 +102,13 @@ function groupBySettlement(
     if (building.type === BuildingType.Farm) groupAt(building.x, building.y).farms.push(building);
     else if (building.type === BuildingType.Workshop) groupAt(building.x, building.y).workshops.push(building);
     else if (building.type === BuildingType.Temple) groupAt(building.x, building.y).temples.push(building);
+    else if (
+      building.type === BuildingType.Market ||
+      building.type === BuildingType.University ||
+      building.type === BuildingType.Monument
+    ) {
+      groupAt(building.x, building.y).civic.push(building);
+    }
   }
   for (const id of adults) {
     const home = game.buildingById.get(agents.home[id]);
@@ -263,6 +272,17 @@ export function assignJobs(game: Game): void {
         priests = priests.concat(takeFrom(group, wantPriests - priests.length, () => true));
       }
 
+      // Civic buildings share the artisan pool with workshops.
+      const civicSlots = group.civic.reduce(
+        (sum, building) => sum + BUILDING_DEFS[building.type].workers,
+        0,
+      );
+      const wantCivic = Math.min(group.adults.length, civicSlots);
+      let civic = takeFrom(group, wantCivic, (id) => agents.job[id] === Job.Worker);
+      if (civic.length < wantCivic) {
+        civic = civic.concat(takeFrom(group, wantCivic - civic.length, () => true));
+      }
+
       for (let i = 0; i < farmers.length; i += 1) {
         const farm = group.farms[i % Math.max(1, group.farms.length)];
         if (!farm) break;
@@ -280,6 +300,15 @@ export function assignJobs(game: Game): void {
         if (!temple) break;
         assign(priests[i], Job.Priest, temple);
         temple.workers += 1;
+      }
+      let civicIndex = 0;
+      for (const building of group.civic) {
+        const slots = BUILDING_DEFS[building.type].workers;
+        while (building.workers < slots && civicIndex < civic.length) {
+          assign(civic[civicIndex], Job.Worker, building);
+          building.workers += 1;
+          civicIndex += 1;
+        }
       }
     }
 
@@ -310,6 +339,7 @@ export function assignJobs(game: Game): void {
     staffRemaining(groups.flatMap((group) => group.farms), Job.Farmer);
     staffRemaining(groups.flatMap((group) => group.workshops), Job.Worker);
     staffRemaining(groups.flatMap((group) => group.temples), Job.Priest);
+    staffRemaining(groups.flatMap((group) => group.civic), Job.Worker);
 
     // Staff the site with its own settlement first, then draw surplus adults
     // from neighbouring settlements.
@@ -342,16 +372,73 @@ export function assignJobs(game: Game): void {
       for (const id of group.adults) {
         if (used.has(id)) continue;
         const previousJob = agents.job[id];
-        agents.job[id] = Job.Idle;
+        agents.job[id] = Job.Laborer;
         agents.work[id] = NO_BUILDING;
-        if (previousJob !== Job.Idle) {
-          agents.state[id] = AgentState.Idle;
+        if (previousJob !== Job.Laborer) {
+          agents.state[id] = AgentState.Working;
           const home = game.buildingById.get(agents.home[id]) ?? group.center ?? undefined;
           placeNearBuilding(game, id, home, civ);
         }
       }
     }
   }
+}
+
+export interface CivWorkforce {
+  children: number;
+  idle: number;
+  farmers: number;
+  builders: number;
+  priests: number;
+  soldiers: number;
+  workers: number;
+  labourers: number;
+}
+
+/** Current job mix for a faction; children are counted separately from adults. */
+export function countCivJobs(game: Game, civId: number): CivWorkforce {
+  const counts: CivWorkforce = {
+    children: 0,
+    idle: 0,
+    farmers: 0,
+    builders: 0,
+    priests: 0,
+    soldiers: 0,
+    workers: 0,
+    labourers: 0,
+  };
+  const agents = game.agents;
+  for (let id = 0; id < agents.capacity; id += 1) {
+    if (agents.alive[id] === 0 || agents.civ[id] !== civId) continue;
+    if (agents.age[id] < 14) {
+      counts.children += 1;
+      continue;
+    }
+    switch (agents.job[id]) {
+      case Job.Farmer:
+        counts.farmers += 1;
+        break;
+      case Job.Builder:
+        counts.builders += 1;
+        break;
+      case Job.Priest:
+        counts.priests += 1;
+        break;
+      case Job.Soldier:
+        counts.soldiers += 1;
+        break;
+      case Job.Worker:
+        counts.workers += 1;
+        break;
+      case Job.Laborer:
+        counts.labourers += 1;
+        break;
+      default:
+        counts.idle += 1;
+        break;
+    }
+  }
+  return counts;
 }
 
 /** Ages agents, applies hunger and health, pairs partners, and handles births. */

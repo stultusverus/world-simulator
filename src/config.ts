@@ -36,7 +36,7 @@ export const MAX_CATCHUP_TICKS = 6;
 /** Year at which the world begins. */
 export const START_YEAR = 1;
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const SAVE_CHRONICLE_LIMIT = 300;
 export const CHRONICLE_LIMIT = 600;
@@ -47,6 +47,39 @@ export const BIRTH_BASE_CHANCE = 0.22;
 /** Upper bound on births per faction per tick; keeps large cities growing. */
 export const MAX_BIRTHS_PER_TICK = 8;
 export const SOLDIER_UPKEEP_WEALTH = 0.25;
+
+/** Resource storage limits. The HUD reports these so caps are visible. */
+export const FOOD_CAP = 999;
+export const MATERIALS_CAP = 999;
+export const WEALTH_CAP = 9999;
+export const KNOWLEDGE_CAP = 2000;
+
+/** Output of one surplus adult per tick. */
+export const LABORER_FOOD = 0.2;
+export const LABORER_MATERIALS = 0.02;
+export const LABORER_WEALTH = 0.01;
+/** Base materials every faction gathers regardless of labour. */
+export const BASE_MATERIALS_PRODUCTION = 0.65;
+
+/** Per-built-building upkeep, so late-game stockpiles do not simply fill. */
+export const BUILDING_UPKEEP_MATERIALS = 0.02;
+export const BUILDING_UPKEEP_WEALTH = 0.01;
+export const UPKEEP_HAPPINESS_PENALTY = 3;
+/** Household upkeep: every person consumes a little wealth each year. */
+export const WEALTH_UPKEEP_PER_PERSON = 0.02;
+
+/** Prosperous factions spend surplus on a festival every N ticks. */
+export const FESTIVAL_INTERVAL = 25;
+export const FESTIVAL_MIN_FOOD_RATIO = 1.5;
+export const FESTIVAL_MIN_WEALTH = 300;
+export const FESTIVAL_FOOD_COST_RATIO = 0.25;
+export const FESTIVAL_WEALTH_COST = 100;
+export const FESTIVAL_HAPPINESS = 6;
+
+/** A lethal soldier hit can wound instead of kill, reducing war attrition. */
+export const WOUNDED_RETREAT_CHANCE = 0.5;
+export const WOUNDED_HEALTH = 15;
+export const WAR_EXHAUSTION_POP_RATIO = 0.12;
 
 export const SEA_LEVEL = 0.44;
 
@@ -82,10 +115,12 @@ export const MAX_SETTLEMENTS_PER_CIV = 4;
 /** Material cost of founding a new settlement. */
 export const NEW_SETTLEMENT_COST = 120;
 /** Population required per existing settlement before another may be founded. */
-export const NEW_SETTLEMENT_MIN_POP = 300;
+export const NEW_SETTLEMENT_MIN_POP = 250;
 /** Distance range in tiles between an existing centre and a new settlement. */
 export const NEW_SETTLEMENT_MIN_GAP = 16;
 export const NEW_SETTLEMENT_MAX_GAP = 26;
+/** Maximum adults relocated to new settlements per migration pass. */
+export const MAX_MIGRANTS_PER_RUN = 4;
 /** A* node budget for a cross-water route search. */
 export const SEA_PATH_NODES = 10_000;
 /** Number of coastal candidates considered when planning a crossing. */
@@ -121,6 +156,8 @@ export interface BuildingDef {
   era: Era;
   armySlots: number;
   faith: number;
+  /** Flat happiness added while the building stands. */
+  happiness?: number;
   produces: BuildingProduction;
 }
 
@@ -214,6 +251,54 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     armySlots: 6,
     faith: 0,
     produces: {},
+  },
+  [BuildingType.Market]: {
+    type: BuildingType.Market,
+    name: 'Market',
+    short: 'Market',
+    description: 'Stalls and caravan yards. Employs townsfolk and turns goods into coin.',
+    cost: 22,
+    work: 24,
+    maxHp: 90,
+    workers: 5,
+    housing: 0,
+    era: Era.Craft,
+    armySlots: 0,
+    faith: 0,
+    happiness: 2,
+    produces: { wealth: 1.2, materials: 0.2 },
+  },
+  [BuildingType.University]: {
+    type: BuildingType.University,
+    name: 'University',
+    short: 'Univ.',
+    description: 'Scholars gather here. Employs many townsfolk and produces knowledge.',
+    cost: 32,
+    work: 30,
+    maxHp: 100,
+    workers: 6,
+    housing: 0,
+    era: Era.Engine,
+    armySlots: 0,
+    faith: 0,
+    happiness: 1,
+    produces: { knowledge: 2.5 },
+  },
+  [BuildingType.Monument]: {
+    type: BuildingType.Monument,
+    name: 'Monument',
+    short: 'Monument',
+    description: 'A lasting wonder of the Zenith era. Costs much, employs masons and lifts the spirit.',
+    cost: 60,
+    work: 60,
+    maxHp: 160,
+    workers: 4,
+    housing: 0,
+    era: Era.Zenith,
+    armySlots: 0,
+    faith: 12,
+    happiness: 4,
+    produces: { knowledge: 0.5 },
   },
 };
 

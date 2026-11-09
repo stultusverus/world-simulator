@@ -1,5 +1,5 @@
-import { ERA_KNOWLEDGE_REQ, ERA_NAMES, ERA_POP_REQ, MAX_FACTIONS } from '../config';
-import { Job, type Civ } from '../world/types';
+import { ERA_KNOWLEDGE_REQ, ERA_NAMES, ERA_POP_REQ, KNOWLEDGE_CAP, MAX_FACTIONS } from '../config';
+import { BuildingType, Job, type Civ } from '../world/types';
 import type { Game } from './game';
 
 function countPriests(game: Game, civId: number): number {
@@ -19,7 +19,14 @@ function countPriests(game: Game, civId: number): number {
 
 function countTemples(game: Game, civId: number): number {
   return game.buildings.filter(
-    (building) => building.civ === civId && building.built && building.type === 4,
+    (building) => building.civ === civId && building.built && building.type === BuildingType.Temple,
+  ).length;
+}
+
+function countMonuments(game: Game, civId: number): number {
+  return game.buildings.filter(
+    (building) =>
+      building.civ === civId && building.built && building.type === BuildingType.Monument,
   ).length;
 }
 
@@ -30,7 +37,11 @@ export function runProgress(game: Game): void {
     if (!civ.alive) continue;
     const priests = countPriests(game, civ.id);
     const temples = countTemples(game, civ.id);
-    civ.knowledge = Math.min(2000, civ.knowledge + priests * 0.9 + civ.population * 0.018);
+    const monuments = countMonuments(game, civ.id);
+    civ.knowledge = Math.min(
+      KNOWLEDGE_CAP,
+      civ.knowledge + priests * 0.9 + civ.population * 0.018,
+    );
 
     const nextEra = civ.era + 1;
     if (
@@ -52,7 +63,13 @@ export function runProgress(game: Game): void {
     }
 
     const zealous = civ.traits.includes('zealous') ? 10 : 0;
-    civ.faith = Math.max(0, Math.min(100, 6 + civ.piety + temples * 14 + priests * 2.5 + civ.era * 4 + zealous));
+    civ.faith = Math.max(
+      0,
+      Math.min(
+        100,
+        6 + civ.piety + temples * 14 + monuments * 12 + priests * 2.5 + civ.era * 4 + zealous,
+      ),
+    );
 
     for (const milestone of [25, 50, 100, 180, 300, 500]) {
       if (civ.population >= milestone && civ.maxPopulation < milestone) {

@@ -1,4 +1,4 @@
-import { NAVAL_WAR_TICKS } from '../config';
+import { NAVAL_WAR_TICKS, WAR_EXHAUSTION_POP_RATIO, WOUNDED_HEALTH, WOUNDED_RETREAT_CHANCE } from '../config';
 import { differentWalkRegions } from '../world/regions';
 import { AgentState, BuildingType, Job, type Building, type Civ, type War } from '../world/types';
 import { makeSettlementName } from './names';
@@ -107,6 +107,7 @@ export function runWar(game: Game): void {
       for (const id of soldiersA) {
         if (!game.wars.includes(war)) break;
         if (game.agents.alive[id] === 0) continue;
+        if (game.agents.state[id] === AgentState.Returning) continue;
         act(game, war, a, b, id, targetA, soldiersB);
       }
     }
@@ -114,6 +115,7 @@ export function runWar(game: Game): void {
       for (const id of soldiersB) {
         if (!game.wars.includes(war)) break;
         if (game.agents.alive[id] === 0) continue;
+        if (game.agents.state[id] === AgentState.Returning) continue;
         act(game, war, b, a, id, targetB, soldiersA);
       }
     }
@@ -171,6 +173,7 @@ function nearestEnemyWithin(
   let bestDistance = range;
   for (const other of enemies) {
     if (agents.alive[other] === 0) continue;
+    if (agents.state[other] === AgentState.Returning) continue;
     const distance = Math.hypot(agents.x[other] - x, agents.y[other] - y);
     if (distance >= bestDistance) continue;
     // Never chase across water; that is the naval planner's job.
@@ -193,6 +196,7 @@ function act(
   enemies: readonly number[],
 ): void {
   const agents = game.agents;
+  if (agents.alive[id] === 0 || agents.state[id] === AgentState.Returning) return;
   if (!game.buildingById.has(target.id)) return;
   const x = agents.x[id];
   const y = agents.y[id];
@@ -201,6 +205,8 @@ function act(
   let enemyDistance = ENGAGE_RANGE;
   for (const other of enemies) {
     if (agents.alive[other] === 0) continue;
+    // A soldier wounded this tick is already leaving the field.
+    if (agents.state[other] === AgentState.Returning) continue;
     const distance = Math.hypot(agents.x[other] - x, agents.y[other] - y);
     if (distance < enemyDistance) {
       enemyDistance = distance;
@@ -345,6 +351,16 @@ function flushBattle(game: Game, war: War): void {
 }
 
 function killSoldier(game: Game, war: War, civ: Civ, id: number): void {
+  const agents = game.agents;
+  if (agents.alive[id] === 0 || agents.state[id] === AgentState.Returning) return;
+  // Not every lethal blow is fatal: some soldiers are carried home wounded.
+  // This keeps late-game wars costly without repeatedly emptying whole armies.
+  if (game.rng.chance(WOUNDED_RETREAT_CHANCE)) {
+    agents.health[id] = WOUNDED_HEALTH;
+    agents.state[id] = AgentState.Returning;
+    game.soldierPaths.delete(id);
+    return;
+  }
   civ.casualties += 1;
   if (war.a === civ.id) war.casualtiesA += 1;
   else war.casualtiesB += 1;
@@ -447,8 +463,10 @@ function checkPeace(game: Game, war: War): void {
   }
   const soldiersA = soldiersOf(game, a.id).length;
   const soldiersB = soldiersOf(game, b.id).length;
-  const exhaustedA = war.casualtiesA > Math.max(4, a.population * 0.2) || a.food < 3;
-  const exhaustedB = war.casualtiesB > Math.max(4, b.population * 0.2) || b.food < 3;
+  const exhaustedA =
+    war.casualtiesA > Math.max(3, a.population * WAR_EXHAUSTION_POP_RATIO) || a.food < 3;
+  const exhaustedB =
+    war.casualtiesB > Math.max(3, b.population * WAR_EXHAUSTION_POP_RATIO) || b.food < 3;
   if ((exhaustedA && exhaustedB) || ((soldiersA === 0 || soldiersB === 0) && duration > 5)) {
     endWar(game, war, 'peace');
   }

@@ -178,8 +178,10 @@ or UI structure.
 Armies can sail, but civilians do not migrate by sea and new settlements must share
 their parent faction's landmass. Settlement founding is automatic AI expansion; there
 is no player "found city" power. Global agent caps (1,200 / 2,500 / 4,000) remain the
-authoritative population limit per world size. In very long games resources can reach
-their caps and much of the population may be idle; late-game content is a follow-up.
+authoritative population limit per world size, though the HUD does not yet show them.
+In very long games resources can reach their caps and much of the population may be
+idle; late-game content is a follow-up. Navies currently ferry armies only — there is no
+naval combat or coastal interception — and religion spread remains shallow.
 
 ## License
 

@@ -264,7 +264,7 @@ function moveTowardPoint(
   if (!path || path.targetKey !== targetKey || path.index >= path.path.length) {
     const failures = failedRoutes.get(game);
     if (failures && game.world.tick < (failures.get(targetKey) ?? 0)) return;
-    // Land routes first; soldier-on-building targets can fall back to a crossing.
+    // Land routes first; building-targeted strikes can fall back to a crossing.
     let route = findPath(
       game.world,
       Math.floor(agents.x[id]),

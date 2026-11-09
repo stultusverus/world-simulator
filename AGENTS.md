@@ -52,8 +52,8 @@ the console. For simulation changes, also check save → load → continuation.
   build-info label.
 - `src/persist/` — IndexedDB storage with a temporary in-memory fallback.
 - `src/main.ts` — app wiring, input, fixed-step loop, autosave, debug API.
-- `tests/` — worldgen, simulation, war/pathfinding, naval, settlements/growth, powers,
-  storage, save round-trip.
+- `tests/` — worldgen, simulation, war/pathfinding, naval, settlements/growth,
+  extinction/famine/labour, powers, storage, save round-trip.
 
 ## Invariants
 
@@ -100,7 +100,10 @@ the console. For simulation changes, also check save → load → continuation.
 - Late-game resources still cap and much of the population can be idle; this is a known
   balance gap, not a correctness invariant.
 - Settlement expansion uses a minimum 16-tile gap; four-city expansion is still rare on
-  512² because of the agent cap.
+  512² because of the agent cap. The HUD does not yet surface the cap.
+- Navies ferry armies only; there is no naval combat or coastal interception yet, and
+  religion spread is sparse. These are documented gameplay-depth gaps, not save/schema
+  changes.
 - Land/water reachability and naval plans are derived from terrain; call
   `Game.refreshReachability()` after any terrain-shape edit.
 - Deployment has only been validated locally; no production deployment has been

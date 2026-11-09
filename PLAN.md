@@ -40,8 +40,9 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 - **Factions** — generated names/colours/traits; faction AI builds housing, farms,
   workshops, temples and barracks; territory and building caps by settlement tier.
 - **Cities & expansion** — Metropolis tier, population-scaled farm/workshop/temple
-  targets, settlement-aware civilian jobs and construction; up to four AI-founded
-  settlements per faction; losing one town centre no longer destroys the faction.
+  targets, settlement-first civilian jobs with cross-settlement fallback and migration;
+  up to four AI-founded settlements per faction; losing one town centre no longer
+  destroys the faction.
 - **People** — every villager is an agent with needs, health, hunger, happiness, faith,
   a home, a job, a partner and children; aging, births, marriages and death.
 - **Economy** — food, materials, wealth and knowledge; era multipliers; famine and
@@ -78,8 +79,9 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | 5 | Integrate remote fixes: workshop staffing, construction labour, soldier paths, storage status, saved speed, header/deploy | ✅ Done | `63a236a`; 44 upstream tests |
 | 6 | Review-found war retry throttle | ✅ Done | `80cdd95`; 45 tests; 1024 pacing test 4.3 s → 1.1 s |
 | 7 | AGENTS.md & PLAN.md tracking | ✅ Done | This document |
-| 8 | Naval transport, Metropolis + multi-settlement growth, saves refresh, build-metadata safety, docs | ✅ Done | PR #11; 78 tests; browser QA |
+| 8 | Naval transport, Metropolis + multi-settlement growth, saves refresh, build-metadata safety, docs | ✅ Done | PR #11; 78 tests at completion; browser QA |
 | 9 | Audit fixes: zero-pop extinction, proportional/varied famine, city migration + cross-settlement labour, defender interception, HUD warnings | ✅ Done | PR #11 follow-up; 85 tests; 1000-year run QA |
+| 10 | Post-fix audit: verified extinction path, population and settlement health; recorded remaining economy/cap/naval/religion gaps | ✅ Done | PR #11; 85 tests; audit runs |
 
 ## 5. Verification snapshot
 
@@ -93,11 +95,14 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
   three-city faction panel with per-settlement residents/housing, settlement labels,
   boat rendering, save slot → load, live autosave row refresh while the Saves menu is
   open, no console errors.
-- Audit runs (AUDIT3 512², AUDIT4 256², 1,000 years) — no zero-population “zombie”
-  factions, no empty satellite settlements, no famine extinctions; 2–12 battles and
-  47–557 casualties per run; navies sailed and landed.
+- Audit runs (AUDIT 512², AUDIT3 512², AUDIT4 256², 1,000 years) — no zero-population
+  “zombie” factions, no empty satellite settlements, no famine extinctions; 6–8 wars and
+  2–8 battles per run. The extinction path was verified on fresh 256² seeds at years
+  507, 508 and 754; 512² runs survived to year 1000.
+- Late-game audit snapshot (512² year 1000) — about 1,746–1,791 of 2,112–2,165 adults
+  idle and nearly all resources capped; see Known Issues.
 - Performance — 1024² at year 1401: **2,522 people / 9 cities / 626 buildings**, solid
-  **60 fps at 5×** zoomed out; a 512² run reached 2,468 people / 9 cities by year 1000
+  **60 fps at 5×** zoomed out; a 512² run reached 2,480 people / 9 cities by year 1000
   and stayed at ~60 fps at 5× in browser QA.
 - Dev server — `http://127.0.0.1:5173/`; responsive; no replacement server started.
 - Deployment — not performed; Cloudflare remains unauthenticated.
@@ -116,10 +121,18 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
 - [x] **Keep docs current:** README screenshots, PLAN status, AGENTS constraints.
 - [x] **Audit fixes:** population extinction, proportional famine, empty-city
       migration/labour, defender interception, food-shortage HUD warnings.
-- [ ] **Late-game economy:** resources cap and much of the population is idle; add
-      upkeep/sinks, more job slots or new late-era content.
-- [ ] **Four-city expansion:** the 512² agent cap makes the fourth city rare; tune the
-      expansion threshold or cap.
+- [ ] **Late-game economy:** 512² audits end with most resources capped and ~82% of
+      adults idle (1,746–1,791 idle adults at year 1000); add upkeep/sinks, more job
+      slots or new late-era content.
+- [ ] **Four-city expansion:** 512² remains at three cities per faction; the 2,500-agent
+      cap is hit before the 900-population fourth-settlement mark. Tune the threshold or
+      cap after profiling.
+- [ ] **Naval combat and coastal interception:** navies currently ferry armies only;
+      armies can land and raze without naval opposition.
+- [ ] **Religion depth:** spread is sparse (0–2 faith events per 1,000-year audit run);
+      add conversion/reformation events.
+- [ ] **Expose the agent cap:** the HUD shows population but not the global agent cap,
+      so growth silently stops at the limit.
 - [ ] **War balance:** 256² casualty counts are high; tune army size and recovery.
 - [ ] **Automated browser smoke tests:** manual browser QA performed; automation
       (e.g. Playwright) still deferred.
@@ -153,8 +166,11 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
 
 | Issue | Impact | Next step |
 |---|---|---|
-| Late-game resources cap and much labour is idle | Food/materials/wealth/knowledge saturate; most adults have no job slot | Add upkeep/sinks, more job slots or late-era content |
-| Fourth city is rare on 512² | Three civs reach the 2,500-agent cap before the 900-pop expansion mark | Tune expansion thresholds or raise the cap after profiling |
+| Late-game resources cap and most adults are idle | 512² audits end with almost all resources capped and **1,746–1,791 of ~2,112–2,165 adults idle** (81–83%) | Add upkeep/sinks, more job slots or late-era content |
+| Fourth city is unreachable on 512² | 512² stays at three cities per faction; the 2,500-agent cap is hit before the 900-population fourth-settlement mark | Tune expansion thresholds or raise the cap after profiling |
+| Navies are transport-only | Armies can land and raze without naval battles or coastal interception | Add naval interception/coastal defence or transport attrition |
+| Religion spread is sparse | Only 0–2 faith events per 1,000-year audit run | Add conversion/reformation events and stronger neighbour pressure |
+| Global agent cap is invisible in the HUD | Population growth silently stops at the cap; players cannot see why | Show population / cap and a “growth capped” indicator |
 | 256² wars are very costly | 557 casualties over 1,000 years in one audit run | Tune army size, healing and peace conditions |
 | No civilian sea migration or overseas settlements | New cities must be on the same landmass; navies are military-only | Future coastal expansion/colony mechanic |
 | Settlement founding is AI-only | Players cannot directly plant a city; factions expand on their own | Consider a "found settlement" power if requested |
@@ -184,8 +200,9 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
   4-connected land/water regions, diplomacy gated by reachability, 105-tick cross-water
   wars, procedural boat rendering; civilian sea migration deferred.
 - **2026-11-09 — city growth:** Metropolis tier (180 pop / radius 14 / 110 buildings),
-  population-scaled farm/workshop/temple targets, up to four AI settlements, local
-  settlement jobs, capital loss recentres instead of eliminating.
+  population-scaled farm/workshop/temple targets, up to four AI settlements,
+  settlement-first jobs with cross-settlement fallback and migration, capital loss
+  recentres instead of eliminating.
 - **2026-11-09 — saves:** `toSave` canonicalises the derived ownership map so load
   reproduces exactly; reachability and naval caches are derived and never serialized.
 - **2026-11-09 — no CI:** explicitly excluded from this iteration; verification is
@@ -198,6 +215,10 @@ As of **2026-11-09** (branch `feat/navies-settlements-hardening`, based on `850f
   migration fill new cities; defenders intercept and wars produce casualties; HUD shows
   settlement residents/housing and food shortages; settlement minimum spacing raised to
   16 tiles. Late-game resource caps, fourth-city reach and war-cost tuning remain open.
+- **2026-11-09 — post-fix audit:** extinction now fires correctly (fresh 256² seeds at
+  years 507, 508 and 754); population, settlement and famine fixes held. Remaining
+  findings recorded: late-game saturation and idle labour, unreachable fourth city on
+  512², ferry-only navies, sparse religion spread, and an invisible agent cap.
 
 ## 10. How progress is tracked
 

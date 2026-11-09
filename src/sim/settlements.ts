@@ -343,8 +343,8 @@ export function foundNewSettlement(game: Game, civ: Civ, site: SpawnSite): Build
 }
 
 /**
- * Factions that have filled their current building capacity may expand into a
- * new settlement. Checked on a slow, deterministic cadence to stay cheap.
+ * Factions whose cities are full or crowded may expand into a new settlement.
+ * Checked on a slow, deterministic cadence to stay cheap.
  */
 export function runSettlements(game: Game): void {
   if (game.world.tick % 4 !== 0) return;

@@ -181,7 +181,7 @@ describe('settlement founding', () => {
   });
 });
 
-describe('local settlement jobs', () => {
+describe('settlement jobs', () => {
   it('keeps new-city residents working locally and commutes into open slots', () => {
     const game = freshGame();
     const civ = game.civs[0];

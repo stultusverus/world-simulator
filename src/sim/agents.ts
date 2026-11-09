@@ -68,8 +68,8 @@ function emptySettlementGroup(center: Building | null): SettlementGroup {
 
 /**
  * Buckets a faction's built buildings and civilian adults by their nearest town
- * centre, so residents of a new settlement work and idle in their own city
- * instead of being drawn back to the capital.
+ * centre, so residents of a new settlement prefer to work and idle in their own
+ * city; the caller fills any remaining open slots from other settlements.
  */
 function groupBySettlement(
   game: Game,
@@ -109,7 +109,8 @@ function groupBySettlement(
   return groups;
 }
 
-/** Assigns civilian jobs locally per settlement, keeps soldiers in place, and rebuilds building worker counts. */
+/** Assigns civilian jobs settlement-first (with cross-settlement fallback for open
+ *  slots), keeps soldiers in place, and rebuilds building worker counts. */
 export function assignJobs(game: Game): void {
   const agents = game.agents;
   for (const civ of game.civs) {

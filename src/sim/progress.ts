@@ -1,4 +1,17 @@
-import { ERA_KNOWLEDGE_REQ, ERA_NAMES, ERA_POP_REQ, KNOWLEDGE_CAP, MAX_FACTIONS } from '../config';
+import {
+  ERA_KNOWLEDGE_REQ,
+  ERA_NAMES,
+  ERA_POP_REQ,
+  KNOWLEDGE_CAP,
+  MAX_FACTIONS,
+  PATRONAGE_FAITH,
+  PATRONAGE_HAPPINESS,
+  PATRONAGE_INTERVAL,
+  PATRONAGE_KNOWLEDGE_COST,
+  PATRONAGE_MIN_KNOWLEDGE,
+  PATRONAGE_MIN_WEALTH,
+  PATRONAGE_WEALTH_COST,
+} from '../config';
 import { BuildingType, Job, type Civ } from '../world/types';
 import type { Game } from './game';
 
@@ -70,6 +83,27 @@ export function runProgress(game: Game): void {
         6 + civ.piety + temples * 14 + monuments * 12 + priests * 2.5 + civ.era * 4 + zealous,
       ),
     );
+
+    // Late-era scholarship and art are a real sink for capped knowledge and
+    // excess wealth, and give the faction a visible cultural life.
+    if (
+      civ.era >= 3 &&
+      civ.knowledge >= PATRONAGE_MIN_KNOWLEDGE &&
+      civ.wealth >= PATRONAGE_MIN_WEALTH &&
+      tick % PATRONAGE_INTERVAL === 0
+    ) {
+      civ.knowledge -= PATRONAGE_KNOWLEDGE_COST;
+      civ.wealth = Math.max(0, civ.wealth - PATRONAGE_WEALTH_COST);
+      civ.happiness = Math.min(100, civ.happiness + PATRONAGE_HAPPINESS);
+      civ.faith = Math.min(100, civ.faith + PATRONAGE_FAITH);
+      game.addChronicle(
+        'progress',
+        `${civ.name} patronise scholars and artists.`,
+        civ.id,
+        civ.centerX,
+        civ.centerY,
+      );
+    }
 
     for (const milestone of [25, 50, 100, 180, 300, 500]) {
       if (civ.population >= milestone && civ.maxPopulation < milestone) {

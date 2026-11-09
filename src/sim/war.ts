@@ -1,4 +1,16 @@
-import { NAVAL_WAR_TICKS, WAR_EXHAUSTION_POP_RATIO, WOUNDED_HEALTH, WOUNDED_RETREAT_CHANCE } from '../config';
+import {
+  FOOD_CAP,
+  MATERIALS_CAP,
+  NAVAL_WAR_TICKS,
+  NO_CONTACT_NAVAL_PEACE_TICKS,
+  NO_CONTACT_PEACE_TICKS,
+  POST_WAR_RELIEF_FOOD,
+  POST_WAR_RELIEF_MATERIALS,
+  WAR_COOLDOWN_TICKS,
+  WAR_EXHAUSTION_POP_RATIO,
+  WOUNDED_HEALTH,
+  WOUNDED_RETREAT_CHANCE,
+} from '../config';
 import { differentWalkRegions } from '../world/regions';
 import { AgentState, BuildingType, Job, type Building, type Civ, type War } from '../world/types';
 import { makeSettlementName } from './names';
@@ -17,7 +29,7 @@ const SOLDIER_PATH_NODES = 1800;
  *  cannot multiply A* searches by the number of soldiers on every tick. */
 const failedRoutes = new WeakMap<Game, Map<number, number>>();
 
-export type WarEndReason = 'peace' | 'blessing' | 'collapse';
+export type WarEndReason = 'peace' | 'blessing' | 'collapse' | 'stalemate';
 
 export function startWar(game: Game, aId: number, bId: number): War | null {
   if (aId === bId) return null;
@@ -58,16 +70,28 @@ export function endWar(game: Game, war: War, reason: WarEndReason): void {
   const b = game.civs[war.b];
   if (a) {
     a.warId = -1;
-    a.cooldownUntil = game.world.tick + 12;
+    a.cooldownUntil = game.world.tick + WAR_COOLDOWN_TICKS;
   }
   if (b) {
     b.warId = -1;
-    b.cooldownUntil = game.world.tick + 12;
+    b.cooldownUntil = game.world.tick + WAR_COOLDOWN_TICKS;
   }
   if (a && b) {
     const relation = reason === 'collapse' ? -20 : -12;
     game.relations[a.id * 8 + b.id] = relation;
     game.relations[b.id * 8 + a.id] = relation;
+    // Peace relief gives both sides a small stock to rebuild with; it is not
+    // paid when a faction is wiped out.
+    if (reason !== 'collapse') {
+      if (a.alive) {
+        a.materials = Math.min(MATERIALS_CAP, a.materials + POST_WAR_RELIEF_MATERIALS);
+        a.food = Math.min(FOOD_CAP, a.food + POST_WAR_RELIEF_FOOD);
+      }
+      if (b.alive) {
+        b.materials = Math.min(MATERIALS_CAP, b.materials + POST_WAR_RELIEF_MATERIALS);
+        b.food = Math.min(FOOD_CAP, b.food + POST_WAR_RELIEF_FOOD);
+      }
+    }
   }
 
   for (let id = 0; id < game.agents.capacity; id += 1) {
@@ -85,6 +109,8 @@ export function endWar(game: Game, war: War, reason: WarEndReason): void {
       game.addChronicle('diplomacy', `A divine calm ends the war between ${a.name} and ${b.name}.${razedText}`, a.id, war.battleX, war.battleY);
     } else if (reason === 'peace') {
       game.addChronicle('diplomacy', `Peace is made between ${a.name} and ${b.name}.${razedText}`, a.id, war.battleX, war.battleY);
+    } else if (reason === 'stalemate') {
+      game.addChronicle('diplomacy', `The war between ${a.name} and ${b.name} ends without a battle.${razedText}`, a.id, war.battleX, war.battleY);
     }
   }
 }
@@ -141,17 +167,28 @@ function soldiersOf(game: Game, civId: number): number[] {
 }
 
 function nearestEnemyBuilding(game: Game, civ: Civ, enemyCivId: number): Building | null {
+  // Armies target the enemy's economy and army before its homes: housing is
+  // what lets a beaten faction recover after peace.
   let best: Building | null = null;
   let bestDistance = Infinity;
+  let bestHouse: Building | null = null;
+  let bestHouseDistance = Infinity;
   for (const building of game.buildings) {
     if (!building.built || building.civ !== enemyCivId) continue;
     const distance = Math.hypot(building.x - civ.centerX, building.y - civ.centerY);
+    if (building.type === BuildingType.House) {
+      if (distance < bestHouseDistance) {
+        bestHouseDistance = distance;
+        bestHouse = building;
+      }
+      continue;
+    }
     if (distance < bestDistance) {
       bestDistance = distance;
       best = building;
     }
   }
-  return best;
+  return best ?? bestHouse;
 }
 
 function soldierPower(civ: Civ): number {
@@ -405,12 +442,12 @@ function destroyBuilding(
         building.x,
         building.y,
       );
-      eliminateCiv(game, defender);
+      eliminateCiv(game, defender, 'war', attacker.name);
     }
     return;
   }
   if (remaining.length === 0) {
-    eliminateCiv(game, defender);
+    eliminateCiv(game, defender, 'war', attacker.name);
     return;
   }
   if ((attackerIsA ? war.razedA : war.razedB) === 1) {
@@ -424,12 +461,25 @@ function destroyBuilding(
   }
 }
 
-export function eliminateCiv(game: Game, civ: Civ): void {
+export function eliminateCiv(
+  game: Game,
+  civ: Civ,
+  cause: 'war' | 'population' | 'unknown' = 'unknown',
+  attackerName?: string,
+): void {
   if (!civ.alive) return;
   civ.alive = false;
+  const detail =
+    cause === 'war'
+      ? attackerName
+        ? ` Their last town centre fell to ${attackerName}.`
+        : ' Their last town centre fell in war.'
+      : cause === 'population'
+        ? ' Their last people died out.'
+        : '';
   game.addChronicle(
     'society',
-    `The ${civ.name} are no more.`,
+    `The ${civ.name} are no more.${detail}`,
     civ.id,
     civ.centerX,
     civ.centerY,
@@ -456,6 +506,13 @@ function checkPeace(game: Game, war: War): void {
   }
   const duration = game.world.tick - war.startTick;
   const crossing = differentWalkRegions(game.reachability, game.world, a.centerX, a.centerY, b.centerX, b.centerY);
+  // If the armies never make contact, end the phoney war instead of keeping
+  // both sides at war for the full duration.
+  const neverFought = war.lastBattleTick < war.startTick;
+  if (neverFought && duration > (crossing ? NO_CONTACT_NAVAL_PEACE_TICKS : NO_CONTACT_PEACE_TICKS)) {
+    endWar(game, war, 'stalemate');
+    return;
+  }
   // Cross-water campaigns need time for the army to embark, sail and land.
   if (duration > (crossing ? NAVAL_WAR_TICKS : 60)) {
     endWar(game, war, 'peace');
@@ -468,7 +525,8 @@ function checkPeace(game: Game, war: War): void {
   const exhaustedB =
     war.casualtiesB > Math.max(3, b.population * WAR_EXHAUSTION_POP_RATIO) || b.food < 3;
   if ((exhaustedA && exhaustedB) || ((soldiersA === 0 || soldiersB === 0) && duration > 5)) {
-    endWar(game, war, 'peace');
+    // A war that never produced a battle is better described as a stalemate.
+    endWar(game, war, neverFought ? 'stalemate' : 'peace');
   }
 }
 

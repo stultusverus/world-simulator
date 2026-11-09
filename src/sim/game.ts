@@ -1,5 +1,6 @@
 import {
   AGENT_CAP,
+  AGENT_CAP_RESERVE,
   BUILDING_DEFS,
   DEFAULT_STARTING_FACTIONS,
   MAX_AGENTS_SUPPORTED,
@@ -87,6 +88,8 @@ export class Game {
   nextBuildingId = 1;
   nextWarId = 1;
   agentCap: number;
+  /** Slots held back from normal births for emergency wanderers. */
+  agentCapReserve: number;
   wildlifeCap: number;
   worldName: string;
   stats: WorldStats = {
@@ -131,6 +134,7 @@ export class Game {
       this.reachability = computeReachability(this.world);
       this.startWithFactions = save.startWithFactions;
       this.agentCap = AGENT_CAP[save.size] ?? 1200;
+      this.agentCapReserve = AGENT_CAP_RESERVE[save.size] ?? 12;
       this.wildlifeCap = WILDLIFE_CAP[save.size] ?? 150;
       this.agents = AgentPool.fromSnapshot(save.agents);
       this.animals = AnimalPool.fromSnapshot(save.animals);
@@ -165,6 +169,7 @@ export class Game {
     this.reachability = computeReachability(this.world);
     this.startWithFactions = options.startWithFactions;
     this.agentCap = AGENT_CAP[options.size] ?? 1200;
+    this.agentCapReserve = AGENT_CAP_RESERVE[options.size] ?? 12;
     this.wildlifeCap = WILDLIFE_CAP[options.size] ?? 150;
     this.agents = new AgentPool(MAX_AGENTS_SUPPORTED);
     this.animals = new AnimalPool(MAX_ANIMALS_SUPPORTED);
@@ -233,6 +238,11 @@ export class Game {
 
   get year(): number {
     return this.world.tick;
+  }
+
+  /** Normal births stop here; the remainder is reserved for emergency recovery. */
+  get birthCap(): number {
+    return this.agentCap - this.agentCapReserve;
   }
 
   aliveCivs(): Civ[] {
@@ -527,7 +537,7 @@ export class Game {
           break;
         }
       }
-      if (!hasCitizen) eliminateCiv(this, civ);
+      if (!hasCitizen) eliminateCiv(this, civ, 'population');
     }
   }
 }

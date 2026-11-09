@@ -22,6 +22,13 @@ export const AGENT_CAP: Record<number, number> = {
   1024: 4000,
 };
 
+/** Slots held back for emergency wanderers, not normal births. */
+export const AGENT_CAP_RESERVE: Record<number, number> = {
+  256: 12,
+  512: 25,
+  1024: 40,
+};
+
 export const WILDLIFE_CAP: Record<number, number> = {
   256: 150,
   512: 300,
@@ -54,6 +61,16 @@ export const MATERIALS_CAP = 999;
 export const WEALTH_CAP = 9999;
 export const KNOWLEDGE_CAP = 2000;
 
+/** Granaries are population-scaled: surplus above this is not stored. */
+export const FOOD_STORAGE_RATIO = 1.5;
+export const FOOD_STORAGE_MIN = 120;
+export function foodStorageLimit(foodNeed: number): number {
+  return Math.max(
+    FOOD_STORAGE_MIN,
+    Math.min(FOOD_CAP, Math.floor(Math.max(0, foodNeed) * FOOD_STORAGE_RATIO)),
+  );
+}
+
 /** Output of one surplus adult per tick. */
 export const LABORER_FOOD = 0.2;
 export const LABORER_MATERIALS = 0.02;
@@ -65,8 +82,22 @@ export const BASE_MATERIALS_PRODUCTION = 0.65;
 export const BUILDING_UPKEEP_MATERIALS = 0.02;
 export const BUILDING_UPKEEP_WEALTH = 0.01;
 export const UPKEEP_HAPPINESS_PENALTY = 3;
+/** Advanced cities pay substantially more to maintain their buildings, but
+ *  only once they are large enough that the early build-up is not taxed. */
+export const UPKEEP_ERA_MIN_BUILDINGS = 120;
+export const MATERIALS_UPKEEP_ERA_FACTOR = 4;
+export const WEALTH_UPKEEP_ERA_FACTOR = 0.5;
 /** Household upkeep: every person consumes a little wealth each year. */
 export const WEALTH_UPKEEP_PER_PERSON = 0.02;
+/** Wealthy courts spend down their excess instead of pinning at the cap. */
+export const WEALTH_SOFT_CAP = 4000;
+export const WEALTH_OVERFLOW_RATE = 0.02;
+
+/** Families keep having children through a temporary housing shortfall. */
+export const OVERCROWDING_BIRTH_SLACK = 0.35;
+export const OVERCROWDING_BIRTH_PENALTY = 0.5;
+/** A faction with no fertile adults can receive emergency wanderers. */
+export const WANDERER_RESCUE_CHANCE = 0.12;
 
 /** Prosperous factions spend surplus on a festival every N ticks. */
 export const FESTIVAL_INTERVAL = 25;
@@ -80,6 +111,24 @@ export const FESTIVAL_HAPPINESS = 6;
 export const WOUNDED_RETREAT_CHANCE = 0.5;
 export const WOUNDED_HEALTH = 15;
 export const WAR_EXHAUSTION_POP_RATIO = 0.12;
+/** Peace rebuilds: both sides receive a small relief package. */
+export const POST_WAR_RELIEF_MATERIALS = 25;
+export const POST_WAR_RELIEF_FOOD = 15;
+/** A war without a battle ends as a stalemate after this many ticks. */
+export const NO_CONTACT_PEACE_TICKS = 45;
+export const NO_CONTACT_NAVAL_PEACE_TICKS = 100;
+/** Consecutive years of enforced peace after a war ends. */
+export const WAR_COOLDOWN_TICKS = 30;
+
+/** Excess knowledge funds civic patronage instead of sitting at the cap. */
+export const PATRONAGE_INTERVAL = 20;
+export const PATRONAGE_MIN_KNOWLEDGE = 800;
+export const PATRONAGE_KNOWLEDGE_COST = 300;
+export const PATRONAGE_MIN_WEALTH = 100;
+export const PATRONAGE_WEALTH_COST = 60;
+export const PATRONAGE_HAPPINESS = 4;
+export const PATRONAGE_FAITH = 2;
+export const KNOWLEDGE_HAPPINESS_CAP = 8;
 
 export const SEA_LEVEL = 0.44;
 
@@ -158,6 +207,9 @@ export interface BuildingDef {
   faith: number;
   /** Flat happiness added while the building stands. */
   happiness?: number;
+  /** Additional non-material construction requirements. */
+  knowledgeCost?: number;
+  wealthCost?: number;
   produces: BuildingProduction;
 }
 
@@ -282,6 +334,8 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     armySlots: 0,
     faith: 0,
     happiness: 1,
+    knowledgeCost: 40,
+    wealthCost: 20,
     produces: { knowledge: 2.5 },
   },
   [BuildingType.Monument]: {
@@ -298,6 +352,8 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     armySlots: 0,
     faith: 12,
     happiness: 4,
+    knowledgeCost: 80,
+    wealthCost: 40,
     produces: { knowledge: 0.5 },
   },
 };

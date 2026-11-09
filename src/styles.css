@@ -722,6 +722,11 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.stat-row.warning,
+.stat-row.warning span:last-child {
+  color: #e07a6f;
+}
+
 .meter {
   display: block;
   height: 3px;

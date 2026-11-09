@@ -84,8 +84,8 @@ export const NEW_SETTLEMENT_COST = 120;
 /** Population required per existing settlement before another may be founded. */
 export const NEW_SETTLEMENT_MIN_POP = 300;
 /** Distance range in tiles between an existing centre and a new settlement. */
-export const NEW_SETTLEMENT_MIN_GAP = 12;
-export const NEW_SETTLEMENT_MAX_GAP = 24;
+export const NEW_SETTLEMENT_MIN_GAP = 16;
+export const NEW_SETTLEMENT_MAX_GAP = 26;
 /** A* node budget for a cross-water route search. */
 export const SEA_PATH_NODES = 10_000;
 /** Number of coastal candidates considered when planning a crossing. */
@@ -211,7 +211,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     workers: 0,
     housing: 0,
     era: Era.Hearth,
-    armySlots: 4,
+    armySlots: 6,
     faith: 0,
     produces: {},
   },

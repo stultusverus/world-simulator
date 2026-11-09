@@ -32,11 +32,11 @@ import { makeWorldName } from './names';
 import { foundFaction } from './faction';
 import { assignJobs, runAgentLives } from './agents';
 import { runEconomy } from './economy';
-import { runWar } from './war';
+import { runWar, eliminateCiv } from './war';
 import { runDiplomacy } from './diplomacy';
 import { runProgress } from './progress';
 import { runEnvironment } from './environment';
-import { runSettlements, settlementCenters } from './settlements';
+import { runMigration, runSettlements, settlementCenters } from './settlements';
 import type { NavalCrossing } from './naval';
 import type { GameSave } from './save-types';
 
@@ -481,12 +481,29 @@ export class Game {
     assignJobs(this);
     runEconomy(this);
     runAgentLives(this);
+    this.eliminateEmptyCivs();
     runWar(this);
     runDiplomacy(this);
     runProgress(this);
     runSettlements(this);
+    runMigration(this);
     runEnvironment(this);
     this.updateStats();
     if (this.ownershipDirty || this.world.tick % 4 === 0) this.refreshOwnership();
+  }
+
+  /** A people with no living individuals is extinct even if walls remain. */
+  private eliminateEmptyCivs(): void {
+    for (const civ of this.civs) {
+      if (!civ.alive) continue;
+      let hasCitizen = false;
+      for (let id = 0; id < this.agents.capacity; id += 1) {
+        if (this.agents.alive[id] === 1 && this.agents.civ[id] === civ.id) {
+          hasCitizen = true;
+          break;
+        }
+      }
+      if (!hasCitizen) eliminateCiv(this, civ);
+    }
   }
 }

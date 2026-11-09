@@ -200,7 +200,8 @@ export function chooseBuildingType(civ: Civ, built: readonly Building[]): Buildi
   ) {
     return BuildingType.Temple;
   }
-  if (builtCount(built, BuildingType.Barracks) < (civ.warId >= 0 ? 2 : 1) && civ.population >= 9) {
+  const barracksTarget = civ.warId >= 0 ? Math.min(3, 2 + Math.floor(civ.population / 500)) : 1;
+  if (builtCount(built, BuildingType.Barracks) < barracksTarget && civ.population >= 9) {
     return BuildingType.Barracks;
   }
   // No construction need left: stop building rather than filling a city with

@@ -182,7 +182,7 @@ describe('settlement founding', () => {
 });
 
 describe('local settlement jobs', () => {
-  it('keeps new-city residents working and idling locally instead of at the capital', () => {
+  it('keeps new-city residents working locally and commutes into open slots', () => {
     const game = freshGame();
     const civ = game.civs[0];
     const capital = settlementCenters(game, civ.id)[0];
@@ -208,8 +208,8 @@ describe('local settlement jobs', () => {
       expect(nearestCenter(game, civ.id, work!.x, work!.y)?.id).toBe(newCenter.id);
     }
 
-    // Extra new-city residents dumped at the capital must relocate locally;
-    // with all local jobs taken they become idle beside their new home.
+    // Extra new-city residents dumped at the capital must relocate locally when
+    // local slots exist; otherwise they may commute to an open slot elsewhere.
     const extras: number[] = [];
     const house = newHouses[0];
     for (let i = 0; i < 2; i += 1) {
@@ -223,7 +223,7 @@ describe('local settlement jobs', () => {
 
     assignJobs(game);
 
-    for (const id of [...settlers, ...extras]) {
+    for (const id of settlers) {
       const toNew = Math.hypot(game.agents.x[id] - newCenter.x, game.agents.y[id] - newCenter.y);
       const toCapital = Math.hypot(game.agents.x[id] - capital.x, game.agents.y[id] - capital.y);
       expect(toNew).toBeLessThan(toCapital);
@@ -231,9 +231,11 @@ describe('local settlement jobs', () => {
     for (const id of settlers) {
       expect(game.agents.job[id]).toBe(Job.Farmer);
     }
+    // The extra residents are used where slots are open; they are not left
+    // idle when a farm elsewhere in the faction has vacancies.
     for (const id of extras) {
-      expect(game.agents.job[id]).toBe(Job.Idle);
-      expect(game.agents.work[id]).toBe(NO_BUILDING);
+      expect(game.agents.job[id]).not.toBe(Job.Idle);
+      expect(game.agents.work[id]).not.toBe(NO_BUILDING);
     }
     for (const id of capitalAdults) {
       expect(game.agents.job[id]).toBe(Job.Farmer);

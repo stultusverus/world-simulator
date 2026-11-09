@@ -11,9 +11,9 @@ import {
 } from '../config';
 import { personalName } from '../sim/names';
 import {
-  countSettlementBuildings,
   settlementCenters,
   settlementName,
+  settlementStats,
   totalBuildingCapacity,
 } from '../sim/settlements';
 import type { Game } from '../sim/game';
@@ -585,12 +585,12 @@ export class Hud {
         ? '<span class="muted">No standing town centre.</span>'
         : centers
             .map((center) => {
-              const count = countSettlementBuildings(game, civ.id, center);
+              const stats = settlementStats(game, civ.id, center, centers);
               const isCapital = center.x === civ.centerX && center.y === civ.centerY;
               return `
                 <div class="settlement-row">
                   <span class="settlement-name">${escapeHtml(settlementName(game, civ.id, center))}${isCapital ? '<span class="save-tag">CAPITAL</span>' : ''}</span>
-                  <span class="muted small-text">${count} buildings</span>
+                  <span class="muted small-text">${stats.residents}/${stats.housing} pop · ${stats.buildings} bldg</span>
                   <button type="button" class="ghost-button small" data-center-civ data-x="${center.x}" data-y="${center.y}">Center</button>
                 </div>`;
             })
@@ -637,6 +637,7 @@ export class Hud {
         <div><span class="stat-label">Happiness</span><span class="stat-value">${Math.round(civ.happiness)}</span></div>
       </div>
       <div class="stat-row"><span>Food</span><span>${Math.round(civ.food)} <span class="muted">+${civ.foodProduction.toFixed(1)}/yr</span></span></div>
+      ${civ.foodShortage > 0 ? `<div class="stat-row warning"><span>Food shortage</span><span>-${Math.round(civ.foodShortage)}/yr</span></div>` : ''}
       <div class="stat-row"><span>Materials</span><span>${Math.round(civ.materials)}</span></div>
       <div class="stat-row"><span>Wealth</span><span>${Math.round(civ.wealth)}</span></div>
       <div class="stat-row"><span>Knowledge</span><span>${Math.round(civ.knowledge)}</span></div>

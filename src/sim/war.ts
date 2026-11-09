@@ -8,6 +8,7 @@ import { ensureCivCenter, nearestCenter, settlementCenters } from './settlements
 import type { Game } from './game';
 
 const ENGAGE_RANGE = 2.1;
+const INTERCEPT_RANGE = 9;
 const SIEGE_RANGE = 2.6;
 const MOVE_SPEED = 8;
 /** A* node budget for a single soldier route request. */
@@ -158,6 +159,30 @@ function soldierPower(civ: Civ): number {
   return era * trait * morale;
 }
 
+function nearestEnemyWithin(
+  game: Game,
+  enemies: readonly number[],
+  x: number,
+  y: number,
+  range: number,
+): number {
+  const agents = game.agents;
+  let best = -1;
+  let bestDistance = range;
+  for (const other of enemies) {
+    if (agents.alive[other] === 0) continue;
+    const distance = Math.hypot(agents.x[other] - x, agents.y[other] - y);
+    if (distance >= bestDistance) continue;
+    // Never chase across water; that is the naval planner's job.
+    if (differentWalkRegions(game.reachability, game.world, x, y, agents.x[other], agents.y[other])) {
+      continue;
+    }
+    best = other;
+    bestDistance = distance;
+  }
+  return best;
+}
+
 function act(
   game: Game,
   war: War,
@@ -194,6 +219,15 @@ function act(
     return;
   }
 
+  // March toward a nearby enemy army instead of ignoring it and razing a
+  // distant building. This makes wars produce actual battles.
+  const intercept = nearestEnemyWithin(game, enemies, x, y, INTERCEPT_RANGE);
+  if (intercept >= 0) {
+    agents.state[id] = AgentState.Marching;
+    moveTowardPoint(game, id, agents.x[intercept], agents.y[intercept], MOVE_SPEED, -1 - intercept);
+    return;
+  }
+
   const targetX = target.x + 0.5;
   const targetY = target.y + 0.5;
   const distanceToBuilding = Math.hypot(targetX - x, targetY - y);
@@ -213,15 +247,24 @@ function act(
 }
 
 function moveToward(game: Game, id: number, target: Building, speed: number): void {
+  moveTowardPoint(game, id, target.x + 0.5, target.y + 0.5, speed, target.id, target);
+}
+
+function moveTowardPoint(
+  game: Game,
+  id: number,
+  tx: number,
+  ty: number,
+  speed: number,
+  targetKey: number,
+  building?: Building,
+): void {
   const agents = game.agents;
-  const targetKey = target.id;
-  const tx = target.x + 0.5;
-  const ty = target.y + 0.5;
   let path = game.soldierPaths.get(id);
   if (!path || path.targetKey !== targetKey || path.index >= path.path.length) {
     const failures = failedRoutes.get(game);
     if (failures && game.world.tick < (failures.get(targetKey) ?? 0)) return;
-    // Land routes first; soldiers on another landmass fall back to a crossing.
+    // Land routes first; soldier-on-building targets can fall back to a crossing.
     let route = findPath(
       game.world,
       Math.floor(agents.x[id]),
@@ -230,7 +273,9 @@ function moveToward(game: Game, id: number, target: Building, speed: number): vo
       Math.floor(ty),
       SOLDIER_PATH_NODES,
     );
-    if (!route || route.length === 0) route = findNavalRoute(game, id, target, targetKey);
+    if ((!route || route.length === 0) && building) {
+      route = findNavalRoute(game, id, building, targetKey);
+    }
     if (!route || route.length === 0) {
       // Retry on a later tick, not once per soldier per tick.
       const retryMap = failures ?? new Map<number, number>();

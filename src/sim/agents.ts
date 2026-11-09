@@ -282,6 +282,34 @@ export function assignJobs(game: Game): void {
       }
     }
 
+    // Fill any remaining work slots from idle adults elsewhere in the faction.
+    // New settlements can otherwise sit with empty farms while the capital has
+    // hundreds of idle people, which starves the whole faction.
+    const takeAny = (): number | undefined => {
+      for (const group of groups) {
+        for (const id of group.adults) {
+          if (used.has(id)) continue;
+          used.add(id);
+          return id;
+        }
+      }
+      return undefined;
+    };
+    const staffRemaining = (buildings: readonly Building[], job: Job): void => {
+      for (const building of buildings) {
+        const def = BUILDING_DEFS[building.type];
+        while (building.workers < def.workers) {
+          const id = takeAny();
+          if (id === undefined) return;
+          assign(id, job, building);
+          building.workers += 1;
+        }
+      }
+    };
+    staffRemaining(groups.flatMap((group) => group.farms), Job.Farmer);
+    staffRemaining(groups.flatMap((group) => group.workshops), Job.Worker);
+    staffRemaining(groups.flatMap((group) => group.temples), Job.Priest);
+
     // Staff the site with its own settlement first, then draw surplus adults
     // from neighbouring settlements.
     const needBuilders = (): number => wantBuilders - builders.length;
@@ -342,13 +370,19 @@ export function runAgentLives(game: Game): void {
     }
 
     if (civ.foodShortage > 0) {
-      agents.hunger[id] = Math.min(100, agents.hunger[id] + 10);
+      const shortageRatio = Math.min(1, civ.foodShortage / Math.max(1, civ.foodNeed));
+      agents.hunger[id] = Math.min(100, agents.hunger[id] + 3 + shortageRatio * 12);
     } else {
       agents.hunger[id] = Math.max(0, agents.hunger[id] - 14);
     }
 
     if (agents.hunger[id] > 70) {
-      const loss = STARVATION_HEALTH_LOSS * (civ.traits.includes('stoic') ? 0.5 : 1);
+      // Starvation is proportional to the deficit and varies per person, so a
+      // modest shortage weakens a city instead of killing everyone in lockstep.
+      const shortageRatio = Math.min(1, civ.foodShortage / Math.max(1, civ.foodNeed));
+      const resilience = 0.8 + (jitter(id, 7) + 0.5) * 0.4;
+      const loss =
+        STARVATION_HEALTH_LOSS * shortageRatio * resilience * (civ.traits.includes('stoic') ? 0.5 : 1);
       agents.health[id] -= loss;
       if (agents.health[id] <= 0) {
         game.removeAgent(id);

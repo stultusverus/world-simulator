@@ -17,6 +17,8 @@ code.
 
 - [PLAN.md](PLAN.md) — the living project plan: goals, milestones, status and roadmap.
 - [AGENTS.md](AGENTS.md) — conventions and commands for coding agents working here.
+- [docs/audit-2000.md](docs/audit-2000.md) — 2,000-year simulation audit: findings and
+  proposed improvements.
 
 ## Run it
 
@@ -189,7 +191,10 @@ CAPPED badge. Surplus adults work as laborers, and Markets, Universities and Mon
 add late-game jobs, but materials and knowledge can still reach their caps and poorer
 factions can run close to zero wealth; late-game economy remains a balance focus. Navies
 currently ferry armies only — there is no naval combat or coastal interception — and
-religion spread remains shallow.
+religion spread remains shallow. A 2,000-year audit found that very long runs can still
+lose a faction to global-cap birth allocation or post-war housing collapse, and that
+1,024² worlds stabilise well below their agent cap; see
+[docs/audit-2000.md](docs/audit-2000.md).
 
 ## License
 

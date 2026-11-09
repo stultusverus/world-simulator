@@ -108,6 +108,11 @@ As of **2026-11-09** (branch `feat/late-game-society`, based on `5691650`):
   174 / 849 / 168; no zero-population faction, down from the previous worst audit of
   557 casualties.
 - 1,024² pacing test — 200 ticks at ~2.4 ms/tick; performance headroom retained.
+- 2,000-year audit (see [docs/audit-2000.md](docs/audit-2000.md)) — 256² `ALPHA`,
+  `BRAVO` and `CHARLIE` ran to 2000 or first extinction; `BRAVO` lost Velakin at 652
+  and `CHARLIE` lost Moraspire at 228. 512² `DELTA` and 1,024² `TITAN` survived to
+  2000 but materials/knowledge capped, 1,024² stopped at 2,648/4,000 people, and
+  active-war years were 33–40%; findings and follow-ups are recorded in the report.
 - Browser checks at 1280×800 — creation; 256² growth to the cap; cap badge; civ panel
   with workforce/resource limits/world-cap warning; new Market/University/Monument
   sprites; festival and first-Monument chronicle entries; save slot → load; no console
@@ -139,13 +144,23 @@ As of **2026-11-09** (branch `feat/late-game-society`, based on `5691650`):
       the civ panel shows workforce, resource limits and growth warnings.
 - [x] **War balance:** half of lethal soldier hits become wounded retreats and wars end
       sooner; 256² casualties fell to 130 over 1,000 years in the audit seed.
+- [ ] **Audit follow-up — global cap fairness:** the global agent cap is a zero-sum
+      birth pool; later-founded factions can be squeezed to extinction. Add fair slot
+      allocation/reserved quotas and a low-population rescue path.
+- [ ] **Audit follow-up — post-war recovery:** war razing can block births long enough
+      for a faction's fertile cohort to age out. Add soft overcrowding births, rebuild
+      priority, razing limits and emergency immigration.
+- [ ] **Audit follow-up — resources and 1,024² growth:** food/materials/knowledge still
+      cap for most of the late game; 1,024² stops at 2,648/4,000. Add sinks/projects and
+      scale starting factions, settlements and housing with world size.
+- [ ] **Audit follow-up — war logistics and housing:** 1,024² generated 13 wars and only
+      2 battles; per-settlement housing remains imbalanced. Add route-feasibility checks,
+      naval interception, family migration and local housing priority.
+- [ ] **Audit follow-up — religion, ageing and extinction feedback:** conversions are
+      0–2 per 2,000 years, the age pyramid is old, and extinction only says “are no
+      more”. Add religion depth, fertility/ageing review and cause/history feedback.
 - [ ] **Naval combat and coastal interception:** navies currently ferry armies only;
-      armies can land and raze without naval opposition.
-- [ ] **Religion depth:** spread is sparse (0–2 faith events per 1,000-year audit run);
-      add conversion/reformation events.
-- [ ] **Remaining resource pressure:** materials and knowledge can still reach their
-      caps, and less mercantile factions can run wealth close to zero; add further sinks
-      or rebalance upkeep.
+      armies can land and raze without naval opposition (covered by the audit follow-up).
 - [ ] **Automated browser smoke tests:** manual browser QA performed; automation
       (e.g. Playwright) still deferred.
 - [ ] **Deploy after approval:** needs Cloudflare credentials and explicit permission.
@@ -176,16 +191,27 @@ As of **2026-11-09** (branch `feat/late-game-society`, based on `5691650`):
 
 ## 8. Known issues & risks
 
+**Post-iteration 2,000-year audit (2026-11-09):** [docs/audit-2000.md](docs/audit-2000.md)
+ran 256², 512² and 1,024² worlds to year 2000 or the first extinction. The headline
+findings are the global-cap birth allocation, a post-war housing/fertility collapse, and
+late-game resource saturation; the full evidence and proposed fixes are in the report.
+
 | Issue | Impact | Next step |
 |---|---|---|
-| Materials and knowledge still reach their caps | 512² year-1000 audits show materials 999 and knowledge 2,000 for every faction; wealth pressure is now real (5,411 / 273 / 219) | Add further knowledge/material sinks or rebalance upkeep |
-| Less mercantile factions run near zero wealth | Wealth can fall to 200–300, which can trigger the “no wealth with soldiers” happiness penalty | Tune household upkeep or add a small base income |
+| Global agent cap is a zero-sum birth pool | At the cap, births favour earlier civilizations; 256² `BRAVO` later-founded Velakin had 745 births vs 2,464/1,891 and went extinct at 652 with 408 housing empty at year 440; emergency wanderers are also blocked | Fair slot allocation/reserved quotas, per-faction caps, low-population rescue; regression test |
+| War razing can sterilise a faction | 256² `CHARLIE`: one war razed 21 buildings; Moraspire housing fell 54→36 at population 45, births stopped, fertile women aged out (7→1→0), extinction at 228 with food 999 | Soft overcrowding births, post-war rebuild priority, razing limits, emergency immigration |
+| Late-game resources saturate and famine is dormant | 2,000-year runs: food caps for 1,700–1,800 years, knowledge for 1,500–1,600, materials for 1,400–1,500; zero food-shortage/famine ticks; wealth is 259–8,284 | Dynamic storage/spoilage, era-scaled upkeep, late-game projects/wonders/trade |
+| 1,024² stays underpopulated | Only 2,648/4,000 people; the cap is never hit; each faction stabilises at ~880 with 888–924 housing and 224–234/440 buildings | Scale starting factions/settlements with world size, proactive housing, late-era buildings |
+| Wars can be frequent and phoney | 1,024²: 13 starts / 2 battles and ~40% of years at war; 512²: 11/5; 256² `ALPHA` had 491 casualties and one faction reduced to one city | Route feasibility before declaring, naval interception, peace/recovery windows, razing limits |
+| Per-settlement housing is imbalanced | 512² settlements reached 214 residents / 102 housing; 1,024² 300 / 120; migration only moves adults | Local housing/birth checks, family migration, construction priority, HUD warning |
+| Demographic age skew and transient idle | 40–48% of people are elders and only 12–16% children at year 2000; the HUD shows 8 age-14 “idle adults” for a tick after ageing | Review fertility/ageing, assign jobs after ageing or label newly aged adults |
+| Wealth is very unequal | 512² ended at 6,978 / 216 / 291 wealth; 1,024² at 8,039 / 8,284 / 259; wealth only pays soldiers | Spending sinks, trade, redistribution or a base income |
+| Material and knowledge caps remain | Every faction ends with materials 999 and knowledge 2,000; universities produce into a cap | Further knowledge/material sinks or rebalance production |
 | Navies are transport-only | Armies can land and raze without naval battles or coastal interception | Add naval interception/coastal defence or transport attrition |
-| Religion spread is sparse | Only 0–2 faith events per 1,000-year audit run | Add conversion/reformation events and stronger neighbour pressure |
-| 256² wars are still lethal | The audit seed fell from 557 to 130 casualties over 1,000 years, but other seeds remain sensitive to war count and army size | Keep the audit band under review when balance changes |
+| Religion spread is sparse | Only 0–2 conversions per 2,000-year run | Add conversion/reformation events and stronger neighbour pressure |
+| 256² wars are still lethal | The audit seed fell from 557 to 130 casualties over 1,000 years, but 2,000-year runs still show high attrition and extinctions | Keep the audit band under review when balance changes |
 | No civilian sea migration or overseas settlements | New cities must be on the same landmass; navies are military-only | Future coastal expansion/colony mechanic |
 | Settlement founding is AI-only | Players cannot directly plant a city; factions expand on their own | Consider a "found settlement" power if requested |
-| Per-settlement housing can lag population | A settlement may show residents above its own housing while the faction has a surplus elsewhere; migration corrects it slowly | Improve settlement-level housing migration if it persists |
 | Reachability/naval plans are derived, not serialized | Terrain-shape changes must call `refreshReachability()` | Keep future sculpting behind that hook |
 | Production deployment not performed | Cloudflare config validated locally only | Needs credentials + explicit approval |
 | Temporary IndexedDB fallback is session-only | Saves lost on reload/close | UI warns; expected for blocked storage |
@@ -248,6 +274,12 @@ As of **2026-11-09** (branch `feat/late-game-society`, based on `5691650`):
 - **2026-11-09 — HUD:** top bar shows population / cap with a CAPPED tag; civ panel adds
   workforce, resource cap markers and growth warnings; debug stats expose agentCap,
   adults, labourers and idleAdults.
+- **2026-11-09 — 2,000-year audit:** headless runs on all three sizes stopped at 2000 or
+  the first extinction. Found the global-cap birth allocation problem (later factions can
+  be squeezed out), a post-war housing/fertility death spiral, saturated food/materials/
+  knowledge, underpopulated 1,024² worlds, phoney/destructive wars, and persistent
+  per-settlement housing imbalance. No code changes were made; evidence and proposed
+  fixes are in [docs/audit-2000.md](docs/audit-2000.md).
 
 ## 10. How progress is tracked
 

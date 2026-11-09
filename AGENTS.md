@@ -98,9 +98,14 @@ the console. For simulation changes, also check save → load → continuation.
   player "found city" power.
 - Global agent caps (1,200 / 2,500 / 4,000 by world size) remain the authoritative
   population limit; the top bar now shows population / cap and a CAPPED tag.
+- The global cap is also the global birth pool: births are processed by civilization
+  order, so later-founded factions can be squeezed out at the cap. Treat this as a known
+  balance/design risk; see [docs/audit-2000.md](docs/audit-2000.md).
+- War razing can block births long enough for a faction's fertile cohort to age out and
+  go extinct even with food and housing available; see the audit report.
 - Late-game surplus adults become laborers and civic buildings (Market, University,
-  Monument) add jobs; materials and knowledge can still reach their caps, and poor
-  factions can run low on wealth. This is a balance gap, not a correctness invariant.
+  Monument) add jobs; food, materials and knowledge can still reach their caps, famine
+  is dormant, and 1,024² stabilises around 2,648/4,000 people with three factions.
 - Settlement founding is population-gated at 250 people per existing centre; four cities
   are reachable on 512², and the minimum 16-tile gap still applies.
 - Navies ferry armies only; there is no naval combat or coastal interception yet, and

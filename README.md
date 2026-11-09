@@ -186,15 +186,14 @@ or UI structure.
 Armies can sail, but civilians do not migrate by sea and new settlements must share
 their parent faction's landmass. Settlement founding is automatic AI expansion; there
 is no player "found city" power. Global agent caps (1,200 / 2,500 / 4,000) remain the
-authoritative population limit per world size; the top bar shows population / cap and a
-CAPPED badge. Surplus adults work as laborers, and Markets, Universities and Monuments
-add late-game jobs, but materials and knowledge can still reach their caps and poorer
-factions can run close to zero wealth; late-game economy remains a balance focus. Navies
-currently ferry armies only — there is no naval combat or coastal interception — and
-religion spread remains shallow. A 2,000-year audit found that very long runs can still
-lose a faction to global-cap birth allocation or post-war housing collapse, and that
-1,024² worlds stabilise well below their agent cap; see
-[docs/audit-2000.md](docs/audit-2000.md).
+authoritative population limit per world size; the top bar reports the birth limit and
+the small emergency reserve. The audit follow-up added fair birth allocation, emergency
+wanderers, post-war recovery and soft births, so the 2,000-year runs no longer lose a
+faction to the global cap or a housing collapse. Materials and knowledge can still reach
+their caps, wealth remains very unequal, and 1,024² worlds stabilise below their agent
+cap. Navies currently ferry armies only — there is no naval combat or coastal
+interception — and religion spread remains shallow. See
+[docs/audit-2000.md](docs/audit-2000.md) for the audit and follow-up results.
 
 ## License
 

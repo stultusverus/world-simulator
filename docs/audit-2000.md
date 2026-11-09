@@ -159,3 +159,70 @@ add a retrospective event.
 4. Scale 1024² factions/housing so the vast world can grow into its cap.
 5. War logistics, naval interception and per-settlement housing.
 6. Religion and extinction feedback.
+
+## Follow-up implementation (2026-11-09)
+
+The requested five areas were implemented on `feat/late-game-society`: fair cap
+allocation, post-war recovery, late-game economy, war fixes and player feedback. The
+audit was rerun on the same scenarios after the changes.
+
+### What changed
+
+- **Fair cap allocation:** normal births stop at a reserve (12 / 25 / 40 agents by world
+  size), birth slots are shared by sorting civilizations by population (lowest first),
+  and each civilization has a per-tick birth budget. Factions with no fertile adult
+  receive emergency wanderers even when the global cap is otherwise full.
+- **Post-war recovery:** births continue through a small housing shortfall (35% slack at
+  half chance), armies target houses only after other buildings, peace pays 25 materials
+  and 15 food to both sides, war cooldowns are 30 years, and emergency immigration can
+  restore a sterile faction.
+- **Late-game economy:** food storage is population-scaled (1.5× annual need, minimum
+  120); upkeep grows with era once a faction has more than 120 buildings; wealth above
+  4,000 is spent down; Universities and Monuments cost knowledge/wealth as well as
+  materials; Monuments scale to 6 per faction; and excess knowledge/wealth funds
+  patronage every 20 years. Knowledge beyond the final era also adds happiness.
+- **War fixes:** no-contact wars end as stalemates (45 years on land, 100 across water),
+  houses are spared until no other target remains, peace relief and a longer cooldown
+  replace the old immediate re-declaration treadmill, and stalemates get their own
+  chronicle entry.
+- **Feedback:** extinction causes appear in the chronicle and fallen-faction panel (with
+  peak population, casualties and era), the top bar reports the birth limit and emergency
+  reserve, food shows its population-scaled storage limit, and war stalemates are named.
+- **Schema:** no new persisted fields; `SAVE_VERSION` stays 6.
+
+### Post-implementation audit
+
+| Run | Final year | Outcome | Max pop | Cap hit | War starts / battles / stalemates |
+|---|---:|---|---:|---|---|
+| 256² `ALPHA` | 2000 | no extinction | 1,188 | 353 | 13 / 12 / 0 |
+| 256² `BRAVO` | 2000 | **no extinction** (was Velakin at 652) | 1,188 | 360 | 12 / 12 / 0 |
+| 256² `CHARLIE` | 2000 | **no extinction** (was Moraspire at 228) | 1,188 | 307 | 8 / 5 / 1 |
+| 512² `DELTA` | 2000 | no extinction | 2,475 | 506 | 11 / 1 / 10 |
+| 1024² `TITAN` | 2000 | no extinction | 2,644 | never | 13 / 1 / 8 |
+
+- Food cap ticks are now **zero** in every run, and no famine events occurred.
+- 256² factions stabilise around 400 people and two cities each; 512²/1024² hold four
+  cities each (one 512² faction fell to three after a war).
+- Materials end at 0–21 for most large-world factions (one 512² faction still caps at
+  999); knowledge ends at 1,700–2,000; wealth is soft-capped around 4,000 for the rich
+  and remains near zero for poorer factions.
+- Large-world wars are much shorter and mostly end as stalemates; battles are now rare on
+  1024² (1 battle across 13 starts), so war logistics/naval interception is still needed.
+- No faction extinction was observed in any sampled run.
+
+### Remaining gaps after the follow-up
+
+- Materials can still cap on 256² and for one industrious 512² faction; knowledge still
+  reaches 2,000 for some factions (patronage is wealth-gated).
+- 1,024² still stabilises well below its 4,000-agent cap; starting factions/settlements
+  were deliberately not rescaled in this pass.
+- Per-settlement housing, religion depth, the ageing pyramid and the 8 transient age-14
+  “idle” adults were deliberately left out per the request.
+- 1,024² war battles are rare; route feasibility and naval interception remain the
+  missing pieces.
+
+Verification for the follow-up: `npm run typecheck` and `npm run build` pass;
+`npm test` is **104/104 across 23 files**, including new fair-cap and war-recovery
+regression tests. Browser QA at 1280×800 covered the living/fallen faction panels,
+dynamic food storage, war-stalemate and patronage chronicle entries, save → load, and
+1,024² at 5× (~60 fps, no console errors).

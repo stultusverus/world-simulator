@@ -35,7 +35,7 @@ function twoSoldierFixture() {
 }
 
 describe('soldier route retry throttling', () => {
-  it('performs one failed route search per target per tick, then retries next tick', () => {
+  it('shares failed searches until connectivity changes, then retries', () => {
     const { game, soldiers } = twoSoldierFixture();
     const mocked = vi.mocked(findPath);
     mocked.mockClear();
@@ -48,6 +48,12 @@ describe('soldier route retry throttling', () => {
 
     game.world.tick += 1;
     runWar(game);
-    expect(mocked).toHaveBeenCalledTimes(2);
+    expect(mocked).toHaveBeenCalledTimes(1);
+    game.world.terrain[10 * game.world.size + 20] = Tile.Grass;
+    game.refreshReachability();
+    game.world.tick += 1;
+    runWar(game);
+    expect(mocked.mock.calls.length).toBeGreaterThan(1);
+    expect(game.agents.x[soldiers[0]]).toBeGreaterThan(10.5);
   });
 });

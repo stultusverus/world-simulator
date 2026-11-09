@@ -1,5 +1,11 @@
 # Worldsmith — 2,000-Year Audit (2026-11-09)
 
+**Fresh observation:** [Default-size seed `OBSERVE-2000`](observation-2000.md) was
+run separately on baseline `d70aa03` to year 2000, with no extinction. It also checks
+food against the population-scaled storage limit: food remained full in 98–99% of
+faction-years despite staying below the absolute 999 ceiling. The older “food cap ticks”
+figures below should not be read as evidence that dynamic food storage was unsaturated.
+
 **Scope:** headless `Game` runs on the post-iteration `feat/late-game-society` code,
 no player intervention. Each run stopped at **year 2000** or at the **first civilization
 extinction**, whichever came first. Fixed seeds and all three world sizes were sampled.

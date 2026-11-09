@@ -27,7 +27,10 @@ import type { Game } from './game';
 
 export function settlementCenters(game: Game, civId: number): Building[] {
   return game.buildings
-    .filter((building) => building.civ === civId && building.type === BuildingType.TownCenter && building.built)
+    .filter(
+      (building) =>
+        building.civ === civId && building.type === BuildingType.TownCenter && building.built,
+    )
     .sort((a, b) => a.id - b.id);
 }
 
@@ -111,13 +114,7 @@ export function settlementStats(
   return { center, residents, housing, buildings, labourers, idleAdults };
 }
 
-/**
- * Moves idle adults (and couples when possible) from crowded settlements into
- * the emptiest settlements with vacant housing. New cities are built with
- * housing and farms but no residents, so this is what actually fills them.
- * Migration is deliberately round-robin across destinations: filling only the
- * largest surplus would leave the other satellite cities empty forever.
- */
+/** Move households toward vacant housing, prioritising overcrowded settlements. */
 export function runMigration(game: Game): void {
   if (game.world.tick % 8 !== 0) return;
   const agents = game.agents;
@@ -126,94 +123,149 @@ export function runMigration(game: Game): void {
     const centers = settlementCenters(game, civ.id);
     if (centers.length < 2) continue;
     const stats = centers.map((center) => settlementStats(game, civ.id, center, centers));
-    const destinations = stats
-      .filter((entry) => entry.housing - entry.residents >= 4)
-      .sort(
-        (a, b) =>
-          a.residents - b.residents ||
-          b.housing - b.residents - (a.housing - a.residents) ||
-          a.center.id - b.center.id,
-      );
-    if (destinations.length === 0) continue;
-    const sources = stats
-      .filter((entry) => entry.labourers + entry.idleAdults >= 2)
-      .sort((a, b) => b.labourers + b.idleAdults - (a.labourers + a.idleAdults) || a.center.id - b.center.id);
-    if (sources.length === 0) continue;
-
-    const candidates: Array<{ id: number; centerId: number }> = [];
+    const sourceOf = new Map<number, number>();
+    const children = new Map<number, number[]>();
+    const residents: number[] = [];
     for (let id = 0; id < agents.capacity; id += 1) {
-      if (agents.alive[id] !== 1 || agents.civ[id] !== civ.id) continue;
-      if (agents.age[id] < 16) continue;
-      if (agents.job[id] !== Job.Idle && agents.job[id] !== Job.Laborer) continue;
+      if (!agents.alive[id] || agents.civ[id] !== civ.id) continue;
       const home = game.buildingById.get(agents.home[id]);
-      const x = home ? home.x : agents.x[id];
-      const y = home ? home.y : agents.y[id];
-      const center = nearestCenter(game, civ.id, x, y, centers);
-      if (center) candidates.push({ id, centerId: center.id });
+      const center = nearestCenter(
+        game,
+        civ.id,
+        home?.x ?? agents.x[id],
+        home?.y ?? agents.y[id],
+        centers,
+      );
+      if (!center) continue;
+      sourceOf.set(id, center.id);
+      residents.push(id);
+      if (agents.age[id] >= 16) continue;
+      for (const parent of [agents.mother[id], agents.father[id]]) {
+        if (parent === NO_AGENT) continue;
+        const list = children.get(parent) ?? [];
+        list.push(id);
+        children.set(parent, list);
+      }
     }
-
-    const houseFor = (center: Building): Building | null => {
-      let best: Building | null = null;
-      let bestDistance = Infinity;
-      for (const building of game.buildings) {
-        if (building.civ !== civ.id || !building.built || building.type !== BuildingType.House) continue;
-        if (nearestCenter(game, civ.id, building.x, building.y, centers)?.id !== center.id) continue;
-        const distance = Math.hypot(building.x - center.x, building.y - center.y);
-        if (distance < bestDistance) {
-          best = building;
-          bestDistance = distance;
+    const movedIds = new Set<number>();
+    const household = (id: number, sourceId: number): number[] | null => {
+      const members = new Set<number>([id]);
+      const queue = [id];
+      for (let index = 0; index < queue.length; index += 1) {
+        const member = queue[index];
+        if (agents.job[member] === Job.Soldier || movedIds.has(member)) return null;
+        const links = [...(children.get(member) ?? [])];
+        const partner = agents.partner[member];
+        if (partner !== NO_AGENT && agents.alive[partner] && sourceOf.get(partner) === sourceId)
+          links.push(partner);
+        // Dependent siblings stay with both of their resident parents.
+        if (agents.age[member] < 16) links.push(agents.mother[member], agents.father[member]);
+        for (const linked of links) {
+          if (sourceOf.get(linked) !== sourceId || members.has(linked)) continue;
+          members.add(linked);
+          queue.push(linked);
         }
       }
-      return best;
-    };
+      return [...members];
 
+    };
     let moved = 0;
-    const movedIds = new Set<number>();
-    const move = (id: number, destination: Building): void => {
-      const house = houseFor(destination) ?? destination;
-      agents.home[id] = house.id;
-      agents.job[id] = Job.Laborer;
-      agents.work[id] = NO_BUILDING;
-      agents.state[id] = AgentState.Working;
-      const spot = tryFindWalkableNear(game.world, house.x, house.y, 2) ?? { x: house.x, y: house.y };
-      agents.x[id] = spot.x + 0.5;
-      agents.y[id] = spot.y + 0.5;
-      movedIds.add(id);
-      moved += 1;
-    };
-
-    for (const destination of destinations) {
-      if (moved >= MAX_MIGRANTS_PER_RUN) break;
-      const before = moved;
-      const target = Math.min(MAX_MIGRANTS_PER_RUN, before + 2);
-      for (const source of sources) {
-        if (moved >= target) break;
-        if (source.center.id === destination.center.id) continue;
-        for (const candidate of candidates) {
-          if (moved >= target) break;
-          if (candidate.centerId !== source.center.id || movedIds.has(candidate.id)) continue;
-          move(candidate.id, destination.center);
-          const partner = agents.partner[candidate.id];
+    let changed = true;
+    while (changed && moved < MAX_MIGRANTS_PER_RUN) {
+      changed = false;
+      const destinations = [...stats].sort(
+        (a, b) =>
+          a.residents / Math.max(1, a.housing) - b.residents / Math.max(1, b.housing) ||
+          a.center.id - b.center.id,
+      );
+      for (const destination of destinations) {
+        if (destination.housing <= destination.residents) continue;
+        const sources = [...stats].sort(
+          (a, b) =>
+            b.residents - b.housing - (a.residents - a.housing) || a.center.id - b.center.id,
+        );
+        let selected: { source: SettlementStats; members: number[] } | null = null;
+        for (const source of sources) {
+          if (source.center.id === destination.center.id) continue;
           if (
-            moved < target &&
-            partner !== NO_AGENT &&
-            agents.alive[partner] === 1 &&
-            agents.civ[partner] === civ.id &&
-            !movedIds.has(partner) &&
-            agents.age[partner] >= 16 &&
-            (agents.job[partner] === Job.Idle || agents.job[partner] === Job.Laborer)
-          ) {
-            const home = game.buildingById.get(agents.home[partner]);
-            const x = home ? home.x : agents.x[partner];
-            const y = home ? home.y : agents.y[partner];
-            if (nearestCenter(game, civ.id, x, y, centers)?.id === source.center.id) {
-              move(partner, destination.center);
-            }
+            regionAt(game.world, game.reachability, source.center.x, source.center.y) !==
+            regionAt(game.world, game.reachability, destination.center.x, destination.center.y)
+          )
+            continue;
+          if (
+            source.residents / Math.max(1, source.housing) <=
+            destination.residents / Math.max(1, destination.housing) + 0.15
+          )
+            continue;
+          for (const id of residents) {
+            if (sourceOf.get(id) !== source.center.id || agents.age[id] < 16 || movedIds.has(id))
+              continue;
+            if (
+              source.residents <= source.housing &&
+              agents.job[id] !== Job.Laborer &&
+              agents.job[id] !== Job.Idle
+            )
+              continue;
+            const members = household(id, source.center.id);
+            if (
+              !members ||
+              members.length > MAX_MIGRANTS_PER_RUN - moved ||
+              members.length > destination.housing - destination.residents
+            )
+              continue;
+            // Do not reverse the occupancy imbalance with an oversized family.
+            if (
+              (source.residents - members.length) / Math.max(1, source.housing) <
+              (destination.residents + members.length) / Math.max(1, destination.housing)
+            )
+              continue;
+            selected = { source, members };
+            break;
           }
+          if (selected) break;
         }
+        if (!selected) continue;
+        const houses = game.buildings.filter(
+          (b) =>
+            b.civ === civ.id &&
+            b.built &&
+            b.type === BuildingType.House &&
+            nearestCenter(game, civ.id, b.x, b.y, centers)?.id === destination.center.id,
+        );
+        for (const id of selected.members) {
+          const home = houses.length ? houses[moved % houses.length] : destination.center;
+          agents.home[id] = home.id;
+          agents.job[id] = agents.age[id] < 14 ? Job.Idle : Job.Laborer;
+          agents.work[id] = NO_BUILDING;
+          agents.state[id] = agents.age[id] < 14 ? AgentState.Idle : AgentState.Working;
+          const spot = tryFindWalkableNear(game.world, home.x, home.y, 2) ?? home;
+          agents.x[id] = spot.x + 0.5;
+          agents.y[id] = spot.y + 0.5;
+          sourceOf.set(id, destination.center.id);
+          movedIds.add(id);
+          moved += 1;
+        }
+        selected.source.residents -= selected.members.length;
+        destination.residents += selected.members.length;
+        changed = true;
       }
     }
   }
+}
+
+/** A locally crowded settlement with room to add housing. */
+export function crowdedConstructionCenter(game: Game, civ: Civ): Building | null {
+  const centers = settlementCenters(game, civ.id);
+  const cap = settlementCap(civ);
+  const crowded = centers
+    .map((center) => settlementStats(game, civ.id, center, centers))
+    .filter(
+      (s) => s.residents > s.housing && countSettlementBuildings(game, civ.id, s.center) < cap,
+    )
+    .sort(
+      (a, b) => b.residents - b.housing - (a.residents - a.housing) || a.center.id - b.center.id,
+    );
+  return crowded[0]?.center ?? null;
 }
 
 /** Centre with the most room, so construction spreads across settlements. */
@@ -300,7 +352,13 @@ export function findNewSettlementSite(game: Game, civ: Civ): SpawnSite | null {
   return null;
 }
 
-function moveSettlersTo(game: Game, civ: Civ, site: SpawnSite, center: Building, houses: Building[]): void {
+function moveSettlersTo(
+  game: Game,
+  civ: Civ,
+  site: SpawnSite,
+  center: Building,
+  houses: Building[],
+): void {
   const agents = game.agents;
   const homes = houses.length > 0 ? houses : [center];
   const moved = new Set<number>();

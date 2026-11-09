@@ -101,6 +101,7 @@ export function findPath(
   tx: number,
   ty: number,
   maxNodes = 2600,
+  uniformCost = false,
 ): Point[] | null {
   const size = world.size;
   if (sx === tx && sy === ty) return [];
@@ -157,13 +158,15 @@ export function findPath(
         if (closed.has(neighbor)) continue;
         const tile = world.terrain[neighbor];
         const diagonal = dx !== 0 && dy !== 0;
-        const g = currentG + stepCost(tile) * (diagonal ? Math.SQRT2 : 1);
+        const g = currentG + (uniformCost ? 10 : stepCost(tile)) * (diagonal ? Math.SQRT2 : 1);
         const known = gScore.get(neighbor);
         if (known !== undefined && known <= g) continue;
         gScore.set(neighbor, g);
         cameFrom.set(neighbor, current);
-        const h = (Math.abs(nx - tx) + Math.abs(ny - ty)) * 10;
-        open.push(neighbor, g + h);
+        const ax = Math.abs(nx - tx);
+        const ay = Math.abs(ny - ty);
+        const h = (Math.max(ax, ay) + (Math.SQRT2 - 1) * Math.min(ax, ay)) * 10;
+        open.push(neighbor, g + h, -g);
       }
     }
   }

@@ -3,6 +3,7 @@ import type { Civ } from '../world/types';
 import { canReachCivs } from './naval';
 import type { Game } from './game';
 import { startWar } from './war';
+import { canLaunchCampaign } from './campaign';
 
 function hasBarracks(game: Game, civ: Civ): boolean {
   return game.buildings.some(
@@ -64,7 +65,7 @@ export function runDiplomacy(game: Game): void {
       ) {
         const militarist = a.traits.includes('militarist') || b.traits.includes('militarist');
         const threshold = militarist ? -26 : -32;
-        if (relation < threshold) {
+        if (relation < threshold && canLaunchCampaign(game, a, b)) {
           const aggression =
             (a.traits.includes('militarist') ? 1.8 : 1) *
             (b.traits.includes('militarist') ? 1.8 : 1) *

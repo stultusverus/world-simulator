@@ -43,7 +43,7 @@ export const MAX_CATCHUP_TICKS = 6;
 /** Year at which the world begins. */
 export const START_YEAR = 1;
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const SAVE_CHRONICLE_LIMIT = 300;
 export const CHRONICLE_LIMIT = 600;
@@ -92,6 +92,15 @@ export const WEALTH_UPKEEP_PER_PERSON = 0.02;
 /** Wealthy courts spend down their excess instead of pinning at the cap. */
 export const WEALTH_SOFT_CAP = 4000;
 export const WEALTH_OVERFLOW_RATE = 0.02;
+
+/** Mature cities maintain occupied infrastructure and fund capital renewal. */
+export const OCCUPIED_UPKEEP_MATERIALS = 0.025;
+export const CIVIC_UPKEEP_PER_PERSON = 0.004;
+export const RENEWAL_RESERVE = 200;
+export const RENEWAL_SPEND_RATE = 0.06;
+export const SCHOLARSHIP_SPEND_RATE = 0.06;
+export const REPAIR_HP_PER_BUILDER = 10;
+export const REPAIR_MATERIALS_PER_HP = 0.08;
 
 /** Families keep having children through a temporary housing shortfall. */
 export const OVERCROWDING_BIRTH_SLACK = 0.35;
@@ -168,8 +177,12 @@ export const NEW_SETTLEMENT_MIN_POP = 250;
 /** Distance range in tiles between an existing centre and a new settlement. */
 export const NEW_SETTLEMENT_MIN_GAP = 16;
 export const NEW_SETTLEMENT_MAX_GAP = 26;
-/** Maximum adults relocated to new settlements per migration pass. */
-export const MAX_MIGRANTS_PER_RUN = 4;
+/** People relocated per migration pass; households are never split to fit. */
+export const MAX_MIGRANTS_PER_RUN = 12;
+export const CAMPAIGN_PATH_NODES = 12_000;
+export const CAMPAIGN_STALL_TICKS = 12;
+export const CAMPAIGN_MAX_TRAVEL_TICKS = 120;
+export const FAILED_CAMPAIGN_COOLDOWN = 90;
 /** A* node budget for a cross-water route search. */
 export const SEA_PATH_NODES = 10_000;
 /** Number of coastal candidates considered when planning a crossing. */
@@ -365,12 +378,20 @@ export interface TraitDef {
 }
 
 export const TRAITS: TraitDef[] = [
-  { id: 'militarist', name: 'Militarist', description: 'Stronger soldiers and a shorter path to war.' },
+  {
+    id: 'militarist',
+    name: 'Militarist',
+    description: 'Stronger soldiers and a shorter path to war.',
+  },
   { id: 'fertile', name: 'Fertile', description: 'Families grow faster.' },
   { id: 'industrious', name: 'Industrious', description: 'Farms and workshops produce more.' },
   { id: 'zealous', name: 'Zealous', description: 'Faith burns bright and spreads further.' },
   { id: 'scholarly', name: 'Scholarly', description: 'Knowledge and new eras come sooner.' },
-  { id: 'mercantile', name: 'Mercantile', description: 'Wealth accumulates, and tempers run cooler.' },
+  {
+    id: 'mercantile',
+    name: 'Mercantile',
+    description: 'Wealth accumulates, and tempers run cooler.',
+  },
   { id: 'stoic', name: 'Stoic', description: 'Endures famine and hardship.' },
 ];
 

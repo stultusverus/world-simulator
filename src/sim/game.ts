@@ -20,6 +20,7 @@ import {
   NO_OWNER,
   Job,
   type Building,
+  type CampaignHistory,
   type ChronicleKind,
   type Civ,
   type SpawnSite,
@@ -80,6 +81,7 @@ export class Game {
   animals: AnimalPool;
   relations = new Float32Array(MAX_FACTIONS * MAX_FACTIONS);
   wars: War[] = [];
+  campaignHistory: CampaignHistory[] = [];
   chronicle = new Chronicle();
   rng: RNG;
   speed = 1;
@@ -113,6 +115,8 @@ export class Game {
 
   constructor(options: GameOptions, save?: GameSave) {
     if (save) {
+      if (save.version !== SAVE_VERSION)
+        throw new Error('This save was created by an incompatible version.');
       this.world = {
         size: save.world.size,
         seedText: save.world.seedText,
@@ -148,6 +152,7 @@ export class Game {
         this.buildingAt.set(building.y * this.world.size + building.x, building);
       }
       this.wars = save.wars.map((war) => ({ ...war }));
+      this.campaignHistory = save.campaignHistory.map((history) => ({ ...history }));
       this.relations.set(save.relations);
       this.chronicle.entries = save.chronicle.map((entry) => ({ ...entry }));
       this.nextBuildingId = save.nextBuildingId;
@@ -221,6 +226,7 @@ export class Game {
       civs: this.civs.map((civ) => ({ ...civ, traits: [...civ.traits] })),
       buildings: this.buildings.map((building) => ({ ...building })),
       wars: this.wars.map((war) => ({ ...war })),
+      campaignHistory: this.campaignHistory.map((history) => ({ ...history })),
       relations: this.relations.slice(),
       agents: this.agents.toSnapshot(),
       animals: this.animals.toSnapshot(),
@@ -266,7 +272,11 @@ export class Game {
       foundFaction(this, site.x, site.y, { initial: true });
     }
     if (!this.startWithFactions) {
-      this.chronicle.add(this.world.tick, 'nature', 'The land lies empty, waiting for its first people.');
+      this.chronicle.add(
+        this.world.tick,
+        'nature',
+        'The land lies empty, waiting for its first people.',
+      );
     }
     this.seedWildlife();
   }
@@ -313,7 +323,13 @@ export class Game {
     this.soldierPaths.delete(id);
   }
 
-  addBuilding(civId: number, type: Building['type'], x: number, y: number, built: boolean): Building {
+  addBuilding(
+    civId: number,
+    type: Building['type'],
+    x: number,
+    y: number,
+    built: boolean,
+  ): Building {
     const def = BUILDING_DEFS[type];
     const building: Building = {
       id: this.nextBuildingId++,
@@ -360,7 +376,12 @@ export class Game {
     const originX = center?.x ?? civ.centerX;
     const originY = center?.y ?? civ.centerY;
     const maxR = maxRadius ?? SETTLEMENT_TIERS[settlementTier(civ.population)].radius;
-    const originRegion = regionAt(this.world, this.reachability, Math.floor(originX), Math.floor(originY));
+    const originRegion = regionAt(
+      this.world,
+      this.reachability,
+      Math.floor(originX),
+      Math.floor(originY),
+    );
     const accept = (x: number, y: number): boolean => {
       if (!isWalkableAt(this.world, x, y)) return false;
       const index = y * this.world.size + x;
@@ -414,6 +435,7 @@ export class Game {
   refreshReachability(): void {
     this.reachability = computeReachability(this.world);
     this.navalPlans.clear();
+    this.soldierPaths.clear();
   }
 
   markTerrainChanged(index: number): void {

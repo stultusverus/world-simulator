@@ -99,7 +99,14 @@ export type TraitId =
   | 'mercantile'
   | 'stoic';
 
-export type ChronicleKind = 'society' | 'war' | 'diplomacy' | 'faith' | 'progress' | 'power' | 'nature';
+export type ChronicleKind =
+  | 'society'
+  | 'war'
+  | 'diplomacy'
+  | 'faith'
+  | 'progress'
+  | 'power'
+  | 'nature';
 
 export interface SpawnSite {
   x: number;
@@ -189,6 +196,19 @@ export interface War {
   battleDeaths: number;
   battleX: number;
   battleY: number;
+  lastProgressTick: number;
+  contactDeadline: number;
+  targetA: number;
+  targetB: number;
+  bestRemainingA: number;
+  bestRemainingB: number;
+}
+
+export interface CampaignHistory {
+  a: number;
+  b: number;
+  failures: number;
+  retryAfter: number;
 }
 
 export interface ChronicleEntry {

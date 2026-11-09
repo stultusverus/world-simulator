@@ -1,5 +1,7 @@
 import {
   FOOD_CAP,
+  CAMPAIGN_STALL_TICKS,
+  FAILED_CAMPAIGN_COOLDOWN,
   MATERIALS_CAP,
   NAVAL_WAR_TICKS,
   NO_CONTACT_NAVAL_PEACE_TICKS,
@@ -11,11 +13,10 @@ import {
   WOUNDED_HEALTH,
   WOUNDED_RETREAT_CHANCE,
 } from '../config';
-import { differentWalkRegions } from '../world/regions';
+import { canReachByLandOrSea, differentWalkRegions } from '../world/regions';
 import { AgentState, BuildingType, Job, type Building, type Civ, type War } from '../world/types';
 import { makeSettlementName } from './names';
-import { findNavalRoute } from './naval';
-import { findPath } from './pathfind';
+import { campaignRoute, campaignTarget, campaignTravelTime } from './campaign';
 import { ensureCivCenter, nearestCenter, settlementCenters } from './settlements';
 import type { Game } from './game';
 
@@ -23,8 +24,6 @@ const ENGAGE_RANGE = 2.1;
 const INTERCEPT_RANGE = 9;
 const SIEGE_RANGE = 2.6;
 const MOVE_SPEED = 8;
-/** A* node budget for a single soldier route request. */
-const SOLDIER_PATH_NODES = 1800;
 /** Failed route searches are shared per target for one tick so a stalled army
  *  cannot multiply A* searches by the number of soldiers on every tick. */
 const failedRoutes = new WeakMap<Game, Map<number, number>>();
@@ -37,6 +36,17 @@ export function startWar(game: Game, aId: number, bId: number): War | null {
   const b = game.civs[bId];
   if (!a?.alive || !b?.alive) return null;
   if (a.warId >= 0 || b.warId >= 0) return null;
+  const crossing =
+    canReachByLandOrSea(
+      game.reachability,
+      game.world,
+      a.centerX,
+      a.centerY,
+      b.centerX,
+      b.centerY,
+    ) &&
+    differentWalkRegions(game.reachability, game.world, a.centerX, a.centerY, b.centerX, b.centerY);
+  const baseDeadline = crossing ? NO_CONTACT_NAVAL_PEACE_TICKS : NO_CONTACT_PEACE_TICKS;
   const war: War = {
     id: game.nextWarId++,
     a: aId,
@@ -51,13 +61,25 @@ export function startWar(game: Game, aId: number, bId: number): War | null {
     battleDeaths: 0,
     battleX: Math.round((a.centerX + b.centerX) / 2),
     battleY: Math.round((a.centerY + b.centerY) / 2),
+    lastProgressTick: game.year,
+    contactDeadline: Math.max(baseDeadline, (campaignTravelTime(game, a, b) ?? 0) + 8),
+    targetA: -1,
+    targetB: -1,
+    bestRemainingA: Infinity,
+    bestRemainingB: Infinity,
   };
   game.wars.push(war);
   a.warId = war.id;
   b.warId = war.id;
   game.relations[aId * 8 + bId] = -55;
   game.relations[bId * 8 + aId] = -55;
-  game.addChronicle('diplomacy', `War erupts between ${a.name} and ${b.name}.`, a.id, war.battleX, war.battleY);
+  game.addChronicle(
+    'diplomacy',
+    `War erupts between ${a.name} and ${b.name}.`,
+    a.id,
+    war.battleX,
+    war.battleY,
+  );
   return war;
 }
 
@@ -68,6 +90,21 @@ export function endWar(game: Game, war: War, reason: WarEndReason): void {
   game.wars.splice(index, 1);
   const a = game.civs[war.a];
   const b = game.civs[war.b];
+  const pairA = Math.min(war.a, war.b);
+  const pairB = Math.max(war.a, war.b);
+  let history = game.campaignHistory.find((h) => h.a === pairA && h.b === pairB);
+  if (reason === 'stalemate') {
+    if (!history) {
+      history = { a: pairA, b: pairB, failures: 0, retryAfter: 0 };
+      game.campaignHistory.push(history);
+    }
+    history.failures += 1;
+    history.retryAfter =
+      game.year + Math.min(600, FAILED_CAMPAIGN_COOLDOWN * 2 ** Math.min(3, history.failures - 1));
+  } else if (history && war.lastBattleTick >= war.startTick) {
+    history.failures = 0;
+    history.retryAfter = 0;
+  }
   if (a) {
     a.warId = -1;
     a.cooldownUntil = game.world.tick + WAR_COOLDOWN_TICKS;
@@ -106,11 +143,29 @@ export function endWar(game: Game, war: War, reason: WarEndReason): void {
     const razed = war.razedA + war.razedB;
     const razedText = razed > 0 ? ` ${razed} buildings lie in ruin.` : '';
     if (reason === 'blessing') {
-      game.addChronicle('diplomacy', `A divine calm ends the war between ${a.name} and ${b.name}.${razedText}`, a.id, war.battleX, war.battleY);
+      game.addChronicle(
+        'diplomacy',
+        `A divine calm ends the war between ${a.name} and ${b.name}.${razedText}`,
+        a.id,
+        war.battleX,
+        war.battleY,
+      );
     } else if (reason === 'peace') {
-      game.addChronicle('diplomacy', `Peace is made between ${a.name} and ${b.name}.${razedText}`, a.id, war.battleX, war.battleY);
+      game.addChronicle(
+        'diplomacy',
+        `Peace is made between ${a.name} and ${b.name}.${razedText}`,
+        a.id,
+        war.battleX,
+        war.battleY,
+      );
     } else if (reason === 'stalemate') {
-      game.addChronicle('diplomacy', `The war between ${a.name} and ${b.name} ends without a battle.${razedText}`, a.id, war.battleX, war.battleY);
+      game.addChronicle(
+        'diplomacy',
+        `The war between ${a.name} and ${b.name} ends without a battle.${razedText}`,
+        a.id,
+        war.battleX,
+        war.battleY,
+      );
     }
   }
 }
@@ -124,10 +179,10 @@ export function runWar(game: Game): void {
       endWar(game, war, 'collapse');
       continue;
     }
-    const targetA = nearestEnemyBuilding(game, a, b.id);
-    const targetB = nearestEnemyBuilding(game, b, a.id);
     const soldiersA = soldiersOf(game, a.id);
     const soldiersB = soldiersOf(game, b.id);
+    const targetA = armyTarget(game, a, b.id, soldiersA);
+    const targetB = armyTarget(game, b, a.id, soldiersB);
 
     if (targetA) {
       for (const id of soldiersA) {
@@ -146,6 +201,8 @@ export function runWar(game: Game): void {
       }
     }
 
+    recordProgress(game, war, targetA, soldiersA, true);
+    recordProgress(game, war, targetB, soldiersB, false);
     if (game.wars.includes(war) && game.world.tick - war.lastBattleTick >= 2) {
       flushBattle(game, war);
     }
@@ -166,29 +223,54 @@ function soldiersOf(game: Game, civId: number): number[] {
   return out;
 }
 
-function nearestEnemyBuilding(game: Game, civ: Civ, enemyCivId: number): Building | null {
-  // Armies target the enemy's economy and army before its homes: housing is
-  // what lets a beaten faction recover after peace.
-  let best: Building | null = null;
-  let bestDistance = Infinity;
-  let bestHouse: Building | null = null;
-  let bestHouseDistance = Infinity;
-  for (const building of game.buildings) {
-    if (!building.built || building.civ !== enemyCivId) continue;
-    const distance = Math.hypot(building.x - civ.centerX, building.y - civ.centerY);
-    if (building.type === BuildingType.House) {
-      if (distance < bestHouseDistance) {
-        bestHouseDistance = distance;
-        bestHouse = building;
-      }
-      continue;
-    }
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = building;
-    }
+function armyTarget(game: Game, civ: Civ, enemy: number, soldiers: number[]): Building | null {
+  if (soldiers.length === 0) return null;
+  for (const id of soldiers) {
+    const path = game.soldierPaths.get(id);
+    const target = path ? game.buildingById.get(path.targetKey) : undefined;
+    if (target?.built && target.civ === enemy && path && path.index < path.path.length)
+      return target;
   }
-  return best ?? bestHouse;
+  const lead = soldiers[0];
+  return campaignTarget(
+    game,
+    civ,
+    enemy,
+    lead === undefined ? civ.centerX : game.agents.x[lead],
+    lead === undefined ? civ.centerY : game.agents.y[lead],
+  );
+}
+
+function recordProgress(
+  game: Game,
+  war: War,
+  target: Building | null,
+  soldiers: number[],
+  sideA: boolean,
+): void {
+  if (!target) return;
+  const targetKey = sideA ? 'targetA' : 'targetB';
+  const bestKey = sideA ? 'bestRemainingA' : 'bestRemainingB';
+  if (war[targetKey] !== target.id) {
+    war[targetKey] = target.id;
+    war[bestKey] = Infinity;
+  }
+  let remaining = Infinity;
+  for (const id of soldiers) {
+    if (!game.agents.alive[id]) continue;
+    const path = game.soldierPaths.get(id);
+    if (path?.targetKey === target.id)
+      remaining = Math.min(remaining, path.path.length - path.index);
+    if (
+      Math.hypot(game.agents.x[id] - target.x - 0.5, game.agents.y[id] - target.y - 0.5) <=
+      SIEGE_RANGE
+    )
+      remaining = 0;
+  }
+  if (remaining < war[bestKey]) {
+    war[bestKey] = remaining;
+    war.lastProgressTick = game.year;
+  }
 }
 
 function soldierPower(civ: Civ): number {
@@ -214,7 +296,9 @@ function nearestEnemyWithin(
     const distance = Math.hypot(agents.x[other] - x, agents.y[other] - y);
     if (distance >= bestDistance) continue;
     // Never chase across water; that is the naval planner's job.
-    if (differentWalkRegions(game.reachability, game.world, x, y, agents.x[other], agents.y[other])) {
+    if (
+      differentWalkRegions(game.reachability, game.world, x, y, agents.x[other], agents.y[other])
+    ) {
       continue;
     }
     best = other;
@@ -308,17 +392,15 @@ function moveTowardPoint(
     const failures = failedRoutes.get(game);
     if (failures && game.world.tick < (failures.get(targetKey) ?? 0)) return;
     // Land routes first; building-targeted strikes can fall back to a crossing.
-    let route = findPath(
-      game.world,
+    const route = campaignRoute(
+      game,
       Math.floor(agents.x[id]),
       Math.floor(agents.y[id]),
       Math.floor(tx),
       Math.floor(ty),
-      SOLDIER_PATH_NODES,
+      agents.civ[id],
+      building,
     );
-    if ((!route || route.length === 0) && building) {
-      route = findNavalRoute(game, id, building, targetKey);
-    }
     if (!route || route.length === 0) {
       // Retry on a later tick, not once per soldier per tick.
       const retryMap = failures ?? new Map<number, number>();
@@ -505,16 +587,36 @@ function checkPeace(game: Game, war: War): void {
     return;
   }
   const duration = game.world.tick - war.startTick;
-  const crossing = differentWalkRegions(game.reachability, game.world, a.centerX, a.centerY, b.centerX, b.centerY);
+  const crossing =
+    canReachByLandOrSea(
+      game.reachability,
+      game.world,
+      a.centerX,
+      a.centerY,
+      b.centerX,
+      b.centerY,
+    ) &&
+    differentWalkRegions(game.reachability, game.world, a.centerX, a.centerY, b.centerX, b.centerY);
   // If the armies never make contact, end the phoney war instead of keeping
   // both sides at war for the full duration.
   const neverFought = war.lastBattleTick < war.startTick;
-  if (neverFought && duration > (crossing ? NO_CONTACT_NAVAL_PEACE_TICKS : NO_CONTACT_PEACE_TICKS)) {
+  if (
+    game.year - Math.max(war.lastProgressTick, war.lastBattleTick) >
+    CAMPAIGN_STALL_TICKS * (crossing ? 2 : 1)
+  ) {
+    endWar(game, war, neverFought ? 'stalemate' : 'peace');
+    return;
+  }
+  if (neverFought && duration > war.contactDeadline) {
     endWar(game, war, 'stalemate');
     return;
   }
   // Cross-water campaigns need time for the army to embark, sail and land.
-  if (duration > (crossing ? NAVAL_WAR_TICKS : 60)) {
+  const extraTravel = Math.max(
+    0,
+    war.contactDeadline - (crossing ? NO_CONTACT_NAVAL_PEACE_TICKS : NO_CONTACT_PEACE_TICKS),
+  );
+  if (duration > (crossing ? NAVAL_WAR_TICKS : 60) + extraTravel) {
     endWar(game, war, 'peace');
     return;
   }

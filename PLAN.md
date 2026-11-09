@@ -3,8 +3,8 @@
 > **Living document.** Update this file instead of replacing it when scope, status or
 > priorities change. Last updated: **2026-11-09**.
 >
-> **Code baseline:** `main` @ `5691650` (PR #11 merged). **Iteration branch:**
-> `feat/late-game-society` (new PR; no merge or deploy).
+> **Code baseline:** `main` @ `d70aa03` (PR #12 merged). **Iteration branch:**
+> `feat/reachable-wars-households-economy` (priorities 1–3; PR only, no merge or deploy).
 
 ## 1. Product goal
 
@@ -95,8 +95,29 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | 10 | Post-fix audit: verified extinction path, population and settlement health; recorded remaining economy/cap/naval/religion gaps | ✅ Done | PR #11; 85 tests; audit runs |
 | 11 | Late-game society & balance: laborers, civic buildings, upkeep/festivals, population-gated four-city expansion, wounded retreat, cap/workforce HUD | ✅ Done | `feat/late-game-society`; 96 tests; 512²/256² audits |
 | 12 | Audit follow-up: fair cap allocation, post-war recovery, late-game economy and war fixes, extinction/cap feedback | ✅ Done | PR #12 follow-up; 104 tests; 2,000-year audit rerun |
+| 13 | Route-verified campaigns, household migration/local housing, repairs and continuing civic spending | ✅ Done | 119 local checks; six-world audit; browser save/load; [implementation audit](docs/priorities-1-3.md) |
 
 ## 5. Verification snapshot
+
+Priorities 1–3 are implemented and locally verified: **119/119 checks across 25 files**,
+strict typecheck and production build pass. Six fresh worlds across all three sizes
+reached year 2000 without extinction. `OBSERVE-2000` no-contact endings fell 9 → 0;
+local overcrowding fell 47 → 0 residents; material/knowledge saturation disappeared in
+the four small-world audit seeds. Combat deaths increased 437 → 800, and large-world
+uneven growth/material balances remain explicit limits. Browser creation, war,
+autosave resume and manual save/load were exercised; managed policy blocked DevTools.
+Save version is 7 (older saves refused). See [implementation and results](docs/priorities-1-3.md).
+All checks are local; **no CI workflow** was added.
+
+Fresh observation on **2026-11-09**, baseline `d70aa03`: default 256² seed
+`OBSERVE-2000` reached year 2000 with all three civilizations alive, 1,187 people,
+seven settlements and 416 buildings. Independent replay and save round-trip matched
+exactly. Fourteen wars produced five casualty-bearing battles, nine no-contact endings,
+437 deaths and 17 razed buildings; a secondary town centre fell without faction collapse.
+Food was at its **dynamic** storage limit in 98–99% of each faction's sampled years;
+checking only the absolute 999 ceiling misses this saturation. Local housing imbalance
+persisted and wolves disappeared in year 175. See [the full observation](docs/observation-2000.md).
+No gameplay code was changed for this run.
 
 As of **2026-11-09** (branch `feat/late-game-society`, based on `5691650`):
 
@@ -157,15 +178,18 @@ As of **2026-11-09** (branch `feat/late-game-society`, based on `5691650`):
 - [x] **Audit follow-up — late-game economy:** population-scaled food storage, era-gated
       upkeep, wealth soft cap, knowledge/wealth building costs, expanded Monuments and
       patronage; food no longer caps and no famine appears in the 2,000-year audit.
-- [ ] **Remaining late-game economy:** materials still cap on 256² and one industrious
-      512² faction; knowledge still reaches 2,000 for some factions. Add further sinks.
+- [x] **Continuing economic uses:** mature civic services and capital renewal consume
+      material surplus while preserving construction funds. Staffed scholarship spends
+      Zenith knowledge continuously; peacetime repair crews use labour and materials.
+      Poor or war-damaged factions can still lack institutions; see the new audit.
 - [ ] **1,024² growth:** the vast world still stabilises below its 4,000-agent cap; starting
       factions, settlements and housing were deliberately not rescaled in this pass.
 - [x] **Audit follow-up — war fixes:** no-contact wars end as stalemates, houses are
       targeted last, peace relief and a 30-year cooldown reduce phoney/destructive wars.
-- [ ] **War logistics and per-settlement housing:** 1,024² still produced only one battle
-      across 13 war starts; route feasibility/naval interception and family migration
-      remain open.
+- [x] **War routes and local housing:** verified bounded campaign routes, shared route
+      caches, progress/arrival tracking, escalating failed-pair cooldowns, household
+      migration and construction in crowded settlements. Naval interception remains
+      a separate deferred feature; see the implementation audit.
 - [x] **Audit follow-up — extinction feedback:** cause, peak, casualties and era are shown
       in the chronicle and fallen-faction panel; cap and storage limits are surfaced.
 - [ ] **Religion and ageing:** conversions remain 0–2 per 2,000 years and the age pyramid
@@ -317,3 +341,9 @@ the follow-up implementation addressed the first two, and the remaining gaps are
 5. Update the **Known issues** table when a risk is fixed or discovered.
 6. Keep this file short enough to read before starting work; follow the commands and
    conventions in [AGENTS.md](AGENTS.md).
+
+- **2026-11-09 — priorities 1–3:** route-verified campaigns and progress-aware withdrawal;
+  household migration including dependants and local housing construction; staffed civic
+  spending/renewal, continuous scholarship and peacetime material-funded repairs. Save
+  version 7 persists campaign progress and pair cooldowns; version 6 is refused, without
+  migration. All validation remains local; no CI workflow, merge or deployment.

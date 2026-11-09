@@ -147,11 +147,31 @@ function buildCrossing(
         // never multiply this work.
         if (searches >= maxSearches) return null;
         searches += 1;
-        const departureWater: Point = { x: departureWaterTile % size, y: (departureWaterTile / size) | 0 };
-        const landingWater: Point = { x: landingWaterTile % size, y: (landingWaterTile / size) | 0 };
-        const seaPath = findSeaPath(world, departureWater.x, departureWater.y, landingWater.x, landingWater.y);
+        const departureWater: Point = {
+          x: departureWaterTile % size,
+          y: (departureWaterTile / size) | 0,
+        };
+        const landingWater: Point = {
+          x: landingWaterTile % size,
+          y: (landingWaterTile / size) | 0,
+        };
+        const seaPath = findSeaPath(
+          world,
+          departureWater.x,
+          departureWater.y,
+          landingWater.x,
+          landingWater.y,
+        );
         if (!seaPath) continue;
-        const landingPath = findPath(world, landing.x, landing.y, target.x, target.y, SEA_PATH_NODES);
+        const landingPath = findPath(
+          world,
+          landing.x,
+          landing.y,
+          target.x,
+          target.y,
+          SEA_PATH_NODES,
+          true,
+        );
         if (!landingPath) continue;
         return {
           departure: { x: departure.x, y: departure.y },
@@ -178,7 +198,15 @@ function planLandingFromWater(game: Game, waterRegion: number, target: Building)
   for (const candidate of coasts) {
     const waterTile = candidate.waterByRegion.get(waterRegion);
     if (waterTile === undefined) continue;
-    const landingPath = findPath(world, candidate.x, candidate.y, target.x, target.y, SEA_PATH_NODES);
+    const landingPath = findPath(
+      world,
+      candidate.x,
+      candidate.y,
+      target.x,
+      target.y,
+      SEA_PATH_NODES,
+      true,
+    );
     if (!landingPath) continue;
     return {
       landingWater: { x: waterTile % size, y: (waterTile / size) | 0 },
@@ -194,12 +222,21 @@ function planLandingFromWater(game: Game, waterRegion: number, target: Building)
  * is derived from terrain only and cached on the game (never saved); it is
  * keyed by target id and the walk region the attack departs from.
  */
-export function planNavalCrossing(game: Game, target: Building, sourceCivId?: number): NavalCrossing | null {
+export function planNavalCrossing(
+  game: Game,
+  target: Building,
+  sourceCivId?: number,
+): NavalCrossing | null {
   if (!game.buildingById.has(target.id)) return null;
   const sourceCiv = attackerCiv(game, target, sourceCivId);
   if (!sourceCiv?.alive) return null;
-  const sourceRegion = regionAt(game.world, game.reachability, sourceCiv.centerX, sourceCiv.centerY);
-  const key = `${target.id}:${sourceRegion}`;
+  const sourceRegion = regionAt(
+    game.world,
+    game.reachability,
+    sourceCiv.centerX,
+    sourceCiv.centerY,
+  );
+  const key = `${target.id}:${sourceRegion}:${sourceCiv.centerX}:${sourceCiv.centerY}`;
   if (game.navalPlans.has(key)) return game.navalPlans.get(key) ?? null;
   const plan = buildCrossing(game, target, sourceRegion, sourceCiv.centerX, sourceCiv.centerY);
   game.navalPlans.set(key, plan);
@@ -214,36 +251,29 @@ function planFromRegion(
   sourceX: number,
   sourceY: number,
 ): NavalCrossing | null {
-  const key = `${target.id}:${sourceRegion}`;
+  const key = `${target.id}:${sourceRegion}:${sourceX}:${sourceY}`;
   if (game.navalPlans.has(key)) return game.navalPlans.get(key) ?? null;
   const plan = buildCrossing(game, target, sourceRegion, sourceX, sourceY);
   game.navalPlans.set(key, plan);
   return plan;
 }
 
-function landLegRoute(game: Game, soldierId: number, plan: NavalCrossing): Point[] | null {
-  const agents = game.agents;
+function landLegRoute(game: Game, sx: number, sy: number, plan: NavalCrossing): Point[] | null {
   const landPath = findPath(
     game.world,
-    Math.floor(agents.x[soldierId]),
-    Math.floor(agents.y[soldierId]),
+    sx,
+    sy,
     plan.departure.x,
     plan.departure.y,
     SEA_PATH_NODES,
+    true,
   );
   if (!landPath) return null;
   return [...landPath, plan.departureWater, ...plan.seaPath, plan.landing, ...plan.landingPath];
 }
 
-function seaLegRoute(game: Game, soldierId: number, landing: Landing): Point[] | null {
-  const agents = game.agents;
-  const seaPath = findSeaPath(
-    game.world,
-    Math.floor(agents.x[soldierId]),
-    Math.floor(agents.y[soldierId]),
-    landing.landingWater.x,
-    landing.landingWater.y,
-  );
+function seaLegRoute(game: Game, sx: number, sy: number, landing: Landing): Point[] | null {
+  const seaPath = findSeaPath(game.world, sx, sy, landing.landingWater.x, landing.landingWater.y);
   if (!seaPath) return null;
   return [...seaPath, landing.landing, ...landing.landingPath];
 }
@@ -265,33 +295,58 @@ export function findNavalRoute(
 ): Point[] | null {
   const agents = game.agents;
   if (agents.alive[soldierId] === 0) return null;
+  return findNavalRouteFrom(
+    game,
+    Math.floor(agents.x[soldierId]),
+    Math.floor(agents.y[soldierId]),
+    target,
+    agents.civ[soldierId],
+  );
+}
+
+/** Same route used to verify a campaign before soldiers are committed. */
+export function findNavalRouteFrom(
+  game: Game,
+  sx: number,
+  sy: number,
+  target: Building,
+  sourceCivId: number,
+): Point[] | null {
   if (!game.buildingById.has(target.id)) return null;
   const world = game.world;
   const reach = game.reachability;
-  const sx = Math.floor(agents.x[soldierId]);
-  const sy = Math.floor(agents.y[soldierId]);
   if (sx < 0 || sy < 0 || sx >= world.size || sy >= world.size) return null;
   const soldierRegion = regionAt(world, reach, sx, sy);
   const onWater = isWater(world.terrain[sy * world.size + sx]);
   if (!onWater && !differentWalkRegions(reach, world, sx, sy, target.x, target.y)) return null;
 
-  const plan = planNavalCrossing(game, target, agents.civ[soldierId]);
+  const plan = planNavalCrossing(game, target, sourceCivId);
   if (onWater) {
-    if (plan && regionAt(world, reach, plan.landingWater.x, plan.landingWater.y) === soldierRegion) {
-      return seaLegRoute(game, soldierId, plan);
+    if (
+      plan &&
+      regionAt(world, reach, plan.landingWater.x, plan.landingWater.y) === soldierRegion
+    ) {
+      return seaLegRoute(game, sx, sy, plan);
     }
     const landing = planLandingFromWater(game, soldierRegion, target);
     if (!landing) return null;
-    return seaLegRoute(game, soldierId, landing);
+    return seaLegRoute(game, sx, sy, landing);
   }
 
   if (soldierRegion === 0) return null;
   if (plan && regionAt(world, reach, plan.departure.x, plan.departure.y) === soldierRegion) {
-    return landLegRoute(game, soldierId, plan);
+    return landLegRoute(game, sx, sy, plan);
   }
+  const sourceCiv = game.civs[sourceCivId];
+  if (
+    !plan &&
+    sourceCiv &&
+    regionAt(world, reach, sourceCiv.centerX, sourceCiv.centerY) === soldierRegion
+  )
+    return null;
   const fallback = planFromRegion(game, target, soldierRegion, sx, sy);
   if (!fallback) return null;
-  return landLegRoute(game, soldierId, fallback);
+  return landLegRoute(game, sx, sy, fallback);
 }
 
 /** False when two factions share no land or coastal-water connection. */
@@ -302,7 +357,16 @@ export function canReachCivs(game: Game, a: Civ, b: Civ): boolean {
   if (centersA.length === 0 || centersB.length === 0) return true;
   for (const aCenter of centersA) {
     for (const bCenter of centersB) {
-      if (canReachByLandOrSea(game.reachability, game.world, aCenter.x, aCenter.y, bCenter.x, bCenter.y)) {
+      if (
+        canReachByLandOrSea(
+          game.reachability,
+          game.world,
+          aCenter.x,
+          aCenter.y,
+          bCenter.x,
+          bCenter.y,
+        )
+      ) {
         return true;
       }
     }

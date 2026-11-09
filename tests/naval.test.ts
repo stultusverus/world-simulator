@@ -330,6 +330,9 @@ describe('bounded sea search', () => {
     const mocked = vi.mocked(findSeaPath);
     mocked.mockClear();
     mocked.mockReturnValue(null);
+    // Declaration now verifies and warms the route cache. Invalidate that
+    // successful plan before exercising failure sharing during the campaign.
+    game.refreshReachability();
     const maxPerPlan = MAX_COAST_CANDIDATES * MAX_COAST_CANDIDATES;
 
     runWar(game);

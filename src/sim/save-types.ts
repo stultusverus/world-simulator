@@ -1,6 +1,13 @@
 import type { AgentPoolSnapshot } from './agent-pool';
 import type { AnimalPoolSnapshot } from './animal-pool';
-import type { Building, ChronicleEntry, Civ, SpawnSite, War } from '../world/types';
+import type {
+  Building,
+  CampaignHistory,
+  ChronicleEntry,
+  Civ,
+  SpawnSite,
+  War,
+} from '../world/types';
 
 export interface SoldierPathSave {
   path: Array<{ x: number; y: number }>;
@@ -39,6 +46,7 @@ export interface GameSave {
   civs: Civ[];
   buildings: Building[];
   wars: War[];
+  campaignHistory: CampaignHistory[];
   relations: Float32Array;
   agents: AgentPoolSnapshot;
   animals: AnimalPoolSnapshot;

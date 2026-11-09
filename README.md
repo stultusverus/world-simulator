@@ -55,6 +55,12 @@ and whether to begin with three factions plus wildlife or an empty wilderness.
   sufficiently populous faction can found another settlement (up to four per faction).
   Expansion is population-gated, so four cities are reachable before the population
   cap. Losing one town centre no longer destroys a multi-city faction.
+- **Recovery and civic services** — peace-time builders repair damaged buildings with
+  materials. Mature workshop economies fund services based on population and staffed
+  infrastructure while protecting a construction reserve; excess materials pay for
+  capital renewal. Staffed temples and universities spend surplus Zenith knowledge on
+  scholarship, improving happiness and construction/repair efficiency with diminishing
+  returns.
 - **Eras** — factions climb from the Hearth through Craft and Engine to the Zenith era,
   unlocking new buildings and improving their soldiers.
 - **Culture and religion** — traits bias births, production, war and faith; each faction
@@ -63,7 +69,10 @@ and whether to begin with three factions plus wildlife or an empty wilderness.
   Armies recruit from the people, march overland or sail across water, skirmish, siege
   and raze. Defenders intercept raiders, so battles cost lives as well as buildings;
   soldiers who take a lethal blow may be carried home wounded instead of dying.
-  Unreachable factions will not declare war; cross-water campaigns last longer. Wars end
+  AI declarations verify a bounded land/sea route and travel time to an eligible target.
+  Soldiers share cached routes; stalled campaigns withdraw, and repeated no-contact
+  wars receive escalating pair-specific cooldowns. Verified long marches receive extra
+  travel time. Economic and military buildings are targeted before town centres and homes. Wars end
   from exhaustion, duration, or divine intervention. A capital can fall — and a faction
   with other cities fights on.
 - **Light wildlife** — deer wander and breed; wolves hunt deer. Populations are capped.
@@ -103,7 +112,7 @@ condition and no loss condition.
 
 Autosave runs every 30 seconds and when the tab is hidden. Three manual slots are
 available under **Saves**. Saves are stored in IndexedDB on this browser, keyed by a
-versioned schema (`SAVE_VERSION` 6); incompatible saves are refused with a message.
+versioned schema (`SAVE_VERSION` 7); incompatible saves are refused with a message.
 Loading restores the world, people, relationships, wars, RNG state and chronicle, then
 continues the simulation deterministically.
 
@@ -137,11 +146,12 @@ src/
   caps are 1,200 / 2,500 / 4,000 agents for 256² / 512² / 1,024². Wildlife caps are
   150 / 300 / 500. A 512² audit reached 2,498 people across 12 cities (675 buildings) by
   year 1,600, with every faction holding four settlements.
-- **Save format:** versioned `GameSave` object (`SAVE_VERSION` 6); the codec is covered
+- **Save format:** versioned `GameSave` object (`SAVE_VERSION` 7); the codec is covered
   by a deterministic save → load → 120-tick continuation test. Land/water connectivity
   and naval search plans are derived on load, never serialized; territory is
-  canonicalised before saving. Saves from older versions are refused rather than
-  migrated.
+  canonicalised before saving. Saves from older versions (including version 6) are refused rather than
+  migrated. Campaign progress, arrival deadlines and failed-campaign cooldowns are saved.
+  See [the priorities 1–3 implementation audit](docs/priorities-1-3.md).
 - **Measured in this verification environment** (headless Chromium, software renderer,
   1280×800): 1,024² pacing test costs ~2.4 ms/tick; browser runs stay near 60 fps at
   1,024² while running at 5× zoomed out. Actual frame rate depends on hardware, but the

@@ -4,7 +4,7 @@
 > priorities change. Last updated: **2026-11-09**.
 >
 > **Code baseline:** `850f5ab` (`main` == `origin/main`). **Iteration branch:**
-> `feat/navies-settlements-hardening` (PR pending; no merge or deploy).
+> `feat/navies-settlements-hardening` (PR #11 open; no merge or deploy).
 
 ## 1. Product goal
 
@@ -74,7 +74,7 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | 5 | Integrate remote fixes: workshop staffing, construction labour, soldier paths, storage status, saved speed, header/deploy | ✅ Done | `63a236a`; 44 upstream tests |
 | 6 | Review-found war retry throttle | ✅ Done | `80cdd95`; 45 tests; 1024 pacing test 4.3 s → 1.1 s |
 | 7 | AGENTS.md & PLAN.md tracking | ✅ Done | This document |
-| 8 | Naval transport, Metropolis + multi-settlement growth, saves refresh, build-metadata safety, docs | ✅ Done | `feat/navies-settlements-hardening`; 78 tests; browser QA |
+| 8 | Naval transport, Metropolis + multi-settlement growth, saves refresh, build-metadata safety, docs | ✅ Done | PR #11; 78 tests; browser QA |
 
 ## 5. Verification snapshot
 

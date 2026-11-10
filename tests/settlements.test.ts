@@ -280,6 +280,7 @@ describe('settlement capital loss', () => {
       if (game.agents.alive[id] === 1) game.removeAgent(id);
     }
     game.world.terrain.fill(Tile.Grass);
+    game.refreshReachability();
     const attacker = game.civs[0];
     const defender = game.civs[1];
     attacker.centerX = 10;

@@ -18,6 +18,7 @@ import {
 } from '../world/types';
 import { tryFindWalkableNear } from '../world/world';
 import { nearestCenter, settlementCenters } from './settlements';
+import { repairTarget } from './maintenance';
 import type { Game } from './game';
 
 function jitter(id: number, salt: number): number {
@@ -129,7 +130,8 @@ export function assignJobs(game: Game): void {
     if (!civ.alive) continue;
     const built = game.buildings.filter((building) => building.civ === civ.id && building.built);
     const unbuilt =
-      game.buildings.find((building) => building.civ === civ.id && !building.built) ?? null;
+      game.buildings.find((building) => building.civ === civ.id && !building.built) ??
+      repairTarget(game, civ);
     for (const building of built) building.workers = 0;
 
     const barracks = built.filter((building) => building.type === BuildingType.Barracks);
@@ -172,7 +174,10 @@ export function assignJobs(game: Game): void {
     // them to the first barracks regardless of which city they came from.
     const soldiers: number[] = [...preserved];
     const atWar = civ.warId >= 0;
-    const slots = barracks.reduce((sum, building) => sum + BUILDING_DEFS[building.type].armySlots, 0);
+    const slots = barracks.reduce(
+      (sum, building) => sum + BUILDING_DEFS[building.type].armySlots,
+      0,
+    );
     const wantSoldiers = Math.min(
       Math.floor((adults.length + preserved.length) * (atWar ? 0.35 : 0.18)),
       slots,
@@ -339,10 +344,22 @@ export function assignJobs(game: Game): void {
         }
       }
     };
-    staffRemaining(groups.flatMap((group) => group.farms), Job.Farmer);
-    staffRemaining(groups.flatMap((group) => group.workshops), Job.Worker);
-    staffRemaining(groups.flatMap((group) => group.temples), Job.Priest);
-    staffRemaining(groups.flatMap((group) => group.civic), Job.Worker);
+    staffRemaining(
+      groups.flatMap((group) => group.farms),
+      Job.Farmer,
+    );
+    staffRemaining(
+      groups.flatMap((group) => group.workshops),
+      Job.Worker,
+    );
+    staffRemaining(
+      groups.flatMap((group) => group.temples),
+      Job.Priest,
+    );
+    staffRemaining(
+      groups.flatMap((group) => group.civic),
+      Job.Worker,
+    );
 
     // Staff the site with its own settlement first, then draw surplus adults
     // from neighbouring settlements.
@@ -503,9 +520,7 @@ export function runAgentLives(game: Game): void {
   // At the cap, freed birth slots are shared by the factions that need them
   // most. Processing civilians in ID order let early factions take every slot
   // and starve later-founded ones out of existence.
-  const orderedCivs = game.aliveCivs().sort(
-    (a, b) => a.population - b.population || a.id - b.id,
-  );
+  const orderedCivs = game.aliveCivs().sort((a, b) => a.population - b.population || a.id - b.id);
   const capRoom = Math.max(0, game.agentCap - game.agentCapReserve - agents.count);
   const birthBudget =
     capRoom > 0 ? Math.max(1, Math.floor(capRoom / Math.max(1, orderedCivs.length))) : 0;

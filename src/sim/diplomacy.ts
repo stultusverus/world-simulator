@@ -3,6 +3,7 @@ import type { Civ } from '../world/types';
 import { canReachCivs } from './naval';
 import type { Game } from './game';
 import { startWar } from './war';
+import { canLaunchCampaign } from './campaign';
 
 function hasBarracks(game: Game, civ: Civ): boolean {
   return game.buildings.some(
@@ -17,6 +18,7 @@ function clampRelation(value: number): number {
 export function runDiplomacy(game: Game): void {
   const alive = game.aliveCivs();
   const tick = game.world.tick;
+  const candidates: Array<{ a: Civ; b: Civ; aggression: number }> = [];
   for (let i = 0; i < alive.length; i += 1) {
     for (let j = i + 1; j < alive.length; j += 1) {
       const a = alive[i];
@@ -69,11 +71,16 @@ export function runDiplomacy(game: Game): void {
             (a.traits.includes('militarist') ? 1.8 : 1) *
             (b.traits.includes('militarist') ? 1.8 : 1) *
             (a.traits.includes('mercantile') || b.traits.includes('mercantile') ? 0.7 : 1);
-          if (game.rng.chance(0.03 * aggression)) {
-            startWar(game, a.id, b.id);
-          }
+          candidates.push({ a, b, aggression });
         }
       }
     }
+  }
+  // Rotate the first eligible pair so one expensive deferred preflight cannot
+  // monopolise the aggregate routing allowance every year.
+  for (let offset = 0; offset < candidates.length; offset++) {
+    const { a, b, aggression } = candidates[(tick + offset) % candidates.length];
+    if (a.warId >= 0 || b.warId >= 0 || !canLaunchCampaign(game, a, b)) continue;
+    if (game.rng.chance(0.03 * aggression)) startWar(game, a.id, b.id);
   }
 }

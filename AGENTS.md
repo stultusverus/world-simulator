@@ -65,7 +65,9 @@ the console. For simulation changes, also check save → load → continuation.
 - **Speed:** new worlds start at 1×; loaded games restore their saved speed. Do not
   reset speed inside `installGame`.
 - **Performance:** keep hot loops allocation-light; respect agent/wildlife caps and A*
-  node budgets. Failed soldier route searches share a per-target retry throttle — do
+  node budgets. All simulation routing shares six searches / 16,384 expanded nodes per
+  year across movement and diplomacy. Exhaustion defers work; it is not an unreachable
+  result. Failed soldier route searches share a per-target retry throttle — do
   not multiply A* searches by soldier count per tick. Naval crossing plans are cached per
   target/region; keep them derived, not serialized.
 - **Derived state:** land/water reachability and naval plans are recomputed on load;
@@ -80,7 +82,7 @@ the console. For simulation changes, also check save → load → continuation.
 
 ## Verification
 
-- `npm test` currently covers **104 checks** across 23 files. Keep it green.
+- `npm test` currently covers **131 checks** across 27 files. Keep it green.
 - Use `?debug=1` and the `window.__worldsmith` debug API
   (`startWorld`, `cast`, `save`, `load`, `speed`, `pause`, `stats`, `renderer`,
   `camera`) for browser verification.
@@ -106,17 +108,26 @@ the console. For simulation changes, also check save → load → continuation.
   replacement, or weak factions can die out with housing and food available.
 - Late-game surplus adults become laborers and civic buildings (Market, University,
   Monument) add jobs. Food uses population-scaled storage, wealth has a 4,000 soft cap,
-  but materials/knowledge can still cap for some factions and 1,024² stabilises below its
-  4,000-agent cap with three factions.
-- War: no-contact wars end as stalemates (45 land / 100 naval years) and peace has a
-  30-year cooldown; battles remain rare on 1,024² because armies often fail to reach each
-  other. Route feasibility/naval interception is still open.
+  and mature civic services/renewal plus staffed scholarship consume surplus resources.
+  Civic services protect a 200-material construction reserve; repair crews consume
+  materials after peace. Three-faction 1,024² worlds still stabilise below the agent cap.
+- War: AI declarations verify routes to eligible targets within a 120-year travel budget.
+  Normal no-contact limits are 45 land / 100 naval years, extended for verified long
+  marches; stalled armies withdraw after 12 land / 24 naval years without progress or
+  combat. Failed pairs wait 90/180/360/600 years before retrying; ordinary peace still
+  has a 30-year cooldown. Routing is bounded and naval interception remains deferred.
+- Shared campaign routes use uniform travel costs and are invalidated by reachability
+  refreshes. Route/crossing caches are tick-local so cold loads preserve scheduling.
+  Keep paths derived; persist campaign progress/deadlines, pair verification/history and
+  naval coast-probe cursors.
+- Household migration includes dependent children, never splits a family to fit its
+  12-person budget, and cannot cross water. Local housing needs guide construction.
 - Settlement founding is population-gated at 250 people per existing centre; four cities
   are reachable on 512², and the minimum 16-tile gap still applies.
 - Navies ferry armies only; there is no naval combat or coastal interception yet, and
   religion spread is sparse. These are documented gameplay-depth gaps, not save/schema
   changes.
-- `SAVE_VERSION` is 6. Saves from older versions are refused (no migration); older
+- `SAVE_VERSION` is 8. Saves from older versions are refused (no migration); older
   autosaves will not resume.
 - Land/water reachability and naval plans are derived from terrain; call
   `Game.refreshReachability()` after any terrain-shape edit.

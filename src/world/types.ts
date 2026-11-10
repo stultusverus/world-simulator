@@ -211,6 +211,17 @@ export interface CampaignHistory {
   retryAfter: number;
 }
 
+/** Decision state for bounded preflight work, independent of derived route caches. */
+export interface CampaignVerification {
+  a: number;
+  b: number;
+  sourceCenter: number;
+  target: number;
+  travel: number;
+  nextCandidate: number;
+  retryAfter: number;
+}
+
 export interface ChronicleEntry {
   year: number;
   kind: ChronicleKind;

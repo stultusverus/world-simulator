@@ -6,7 +6,7 @@ vi.mock('../src/sim/pathfind', async (importOriginal) => {
   return { ...actual, findSeaPath: vi.fn(actual.findSeaPath) };
 });
 
-import { MAX_COAST_CANDIDATES, MAX_FACTIONS, NAVAL_WAR_TICKS } from '../src/config';
+import { MAX_COAST_CANDIDATES, MAX_FACTIONS, NAVAL_WAR_TICKS, ROUTE_SEARCHES_PER_TICK } from '../src/config';
 import { runDiplomacy } from '../src/sim/diplomacy';
 import { foundFaction } from '../src/sim/faction';
 import { Game } from '../src/sim/game';
@@ -340,12 +340,13 @@ describe('bounded sea search', () => {
     expect(firstTickSearches).toBeGreaterThan(0);
     expect(firstTickSearches).toBeLessThanOrEqual(maxPerPlan);
 
-    // The failed plan is cached and the retry throttle stops the second soldier.
+    // The shared work allowance stops the second soldier in the same tick.
     runWar(game);
     expect(mocked.mock.calls.length).toBe(firstTickSearches);
 
     game.world.tick += 1;
     runWar(game);
-    expect(mocked.mock.calls.length).toBe(firstTickSearches);
+    // Deferred work is retried in a fresh tick, never cached as unreachable.
+    expect(mocked.mock.calls.length - firstTickSearches).toBeLessThanOrEqual(ROUTE_SEARCHES_PER_TICK);
   });
 });

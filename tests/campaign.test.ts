@@ -70,7 +70,28 @@ describe('campaign feasibility and shared routes', () => {
     for (let y = 0; y < 256; y++) game.world.terrain[y * 256 + 25] = Tile.Mountain;
     game.refreshReachability();
     expect(campaignRoute(game, 10, 10, target.x, target.y, a.id, target)).toBeNull();
+    // Connectivity rejects the blocked route without wasting an A* query.
+    expect(search).toHaveBeenCalledTimes(1);
+    game.world.terrain[10 * 256 + 25] = Tile.Grass;
+    game.refreshReachability();
+    expect(campaignRoute(game, 10, 10, target.x, target.y, a.id, target)).not.toBeNull();
     expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains a valid pair verification when new enemy buildings appear', () => {
+    const { game, a, b } = fixture();
+    const search = vi.mocked(findPath);
+    search.mockClear();
+    expect(canLaunchCampaign(game, a, b)).toBe(true);
+    const count = search.mock.calls.length;
+    game.addBuilding(b.id, BuildingType.Farm, 35, 11, true);
+    game.world.tick++;
+    expect(canLaunchCampaign(game, a, b)).toBe(true);
+    expect(search).toHaveBeenCalledTimes(count);
+    game.refreshReachability();
+    expect(game.campaignVerifications).toHaveLength(0);
+    expect(canLaunchCampaign(game, a, b)).toBe(true);
+    expect(search.mock.calls.length).toBeGreaterThan(count);
   });
 });
 

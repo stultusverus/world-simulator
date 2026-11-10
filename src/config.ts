@@ -43,7 +43,7 @@ export const MAX_CATCHUP_TICKS = 6;
 /** Year at which the world begins. */
 export const START_YEAR = 1;
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 export const SAVE_CHRONICLE_LIMIT = 300;
 export const CHRONICLE_LIMIT = 600;
@@ -180,6 +180,11 @@ export const NEW_SETTLEMENT_MAX_GAP = 26;
 /** People relocated per migration pass; households are never split to fit. */
 export const MAX_MIGRANTS_PER_RUN = 12;
 export const CAMPAIGN_PATH_NODES = 12_000;
+/** Aggregate land + sea routing allowance for an entire simulation year. */
+export const ROUTE_NODES_PER_TICK = 16_384;
+export const ROUTE_SEARCHES_PER_TICK = 6;
+export const CAMPAIGN_PROBES_PER_CHECK = 2;
+export const CAMPAIGN_CHECK_RETRY_TICKS = 4;
 export const CAMPAIGN_STALL_TICKS = 12;
 export const CAMPAIGN_MAX_TRAVEL_TICKS = 120;
 export const FAILED_CAMPAIGN_COOLDOWN = 90;

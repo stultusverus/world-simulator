@@ -112,7 +112,7 @@ condition and no loss condition.
 
 Autosave runs every 30 seconds and when the tab is hidden. Three manual slots are
 available under **Saves**. Saves are stored in IndexedDB on this browser, keyed by a
-versioned schema (`SAVE_VERSION` 7); incompatible saves are refused with a message.
+versioned schema (`SAVE_VERSION` 8); incompatible saves are refused with a message.
 Loading restores the world, people, relationships, wars, RNG state and chronicle, then
 continues the simulation deterministically.
 
@@ -146,17 +146,19 @@ src/
   caps are 1,200 / 2,500 / 4,000 agents for 256² / 512² / 1,024². Wildlife caps are
   150 / 300 / 500. A 512² audit reached 2,498 people across 12 cities (675 buildings) by
   year 1,600, with every faction holding four settlements.
-- **Save format:** versioned `GameSave` object (`SAVE_VERSION` 7); the codec is covered
+- **Save format:** versioned `GameSave` object (`SAVE_VERSION` 8); the codec is covered
   by a deterministic save → load → 120-tick continuation test. Land/water connectivity
   and naval search plans are derived on load, never serialized; territory is
-  canonicalised before saving. Saves from older versions (including version 6) are refused rather than
-  migrated. Campaign progress, arrival deadlines and failed-campaign cooldowns are saved.
+  canonicalised before saving. Version-7 and older saves are refused without migration.
+  Campaign progress, deadlines, failed-pair cooldowns and planning cursors are saved.
+  Active soldier movement paths are saved; computed crossing plans remain derived.
   See [the priorities 1–3 implementation audit](docs/priorities-1-3.md).
-- **Measured in this verification environment** (headless Chromium, software renderer,
-  1280×800): 1,024² pacing test costs ~2.4 ms/tick; browser runs stay near 60 fps at
-  1,024² while running at 5× zoomed out. Actual frame rate depends on hardware, but the
-  renderer is layered for exactly this: the overview texture and territory overlay
-  carry zoomed-out views, while chunk canvases only cover what is on screen.
+- **Routing limits and measurements:** all simulation land/sea routing shares six
+  searches / 16,384 expanded nodes per year; unfinished checks continue in later years.
+  The 600-tick 1024² `PROFILE` review benchmark averaged 12.00 ms/tick, with a 48.83 ms
+  99th percentile and 138.72 ms maximum. These headless timings do not establish steady
+  60 fps. Hardware, world state and shared-runtime load affect frame rate. See
+  [the review validation](docs/pr13-review-fixes.md) for the before/after comparison.
 
 ## Scripts
 

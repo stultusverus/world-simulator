@@ -41,19 +41,19 @@ describe('soldier route retry throttling', () => {
     mocked.mockClear();
 
     runWar(game);
-    expect(mocked).toHaveBeenCalledTimes(1);
+    expect(mocked).toHaveBeenCalledTimes(0);
     for (const id of soldiers) {
       expect(game.agents.x[id]).toBe(id === soldiers[0] ? 10.5 : 11.5);
     }
 
     game.world.tick += 1;
     runWar(game);
-    expect(mocked).toHaveBeenCalledTimes(1);
+    expect(mocked).toHaveBeenCalledTimes(0);
     game.world.terrain[10 * game.world.size + 20] = Tile.Grass;
     game.refreshReachability();
     game.world.tick += 1;
     runWar(game);
-    expect(mocked.mock.calls.length).toBeGreaterThan(1);
+    expect(mocked.mock.calls.length).toBeGreaterThan(0);
     expect(game.agents.x[soldiers[0]]).toBeGreaterThan(10.5);
   });
 });

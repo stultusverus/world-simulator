@@ -3,6 +3,7 @@ import type { AnimalPoolSnapshot } from './animal-pool';
 import type {
   Building,
   CampaignHistory,
+  CampaignVerification,
   ChronicleEntry,
   Civ,
   SpawnSite,
@@ -47,6 +48,8 @@ export interface GameSave {
   buildings: Building[];
   wars: War[];
   campaignHistory: CampaignHistory[];
+  campaignVerifications: CampaignVerification[];
+  navalProbeCursors: Array<[string, number]>;
   relations: Float32Array;
   agents: AgentPoolSnapshot;
   animals: AnimalPoolSnapshot;

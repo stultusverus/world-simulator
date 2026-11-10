@@ -7,6 +7,13 @@ export interface Point {
   y: number;
 }
 
+/** Shared work allowance; exhaustion is deferred work, not an unreachable result. */
+export interface SearchBudget {
+  remaining: number;
+  expanded: number;
+  exhausted: boolean;
+}
+
 interface HeapNode {
   key: number;
   f: number;
@@ -46,10 +53,11 @@ class MinHeap {
     const f = this.fs[0];
     const lastKey = this.keys.pop() as number;
     const lastF = this.fs.pop() as number;
-    this.ties.pop();
+    const lastTie = this.ties.pop() as number;
     if (this.keys.length > 0) {
       this.keys[0] = lastKey;
       this.fs[0] = lastF;
+      this.ties[0] = lastTie;
       let i = 0;
       for (;;) {
         const left = i * 2 + 1;
@@ -78,6 +86,38 @@ class MinHeap {
   }
 }
 
+interface SearchBuffers {
+  size: number;
+  generation: number;
+  scores: Float64Array;
+  parents: Int32Array;
+  seen: Uint32Array;
+  closed: Uint32Array;
+}
+const searchBuffers = new WeakMap<World, SearchBuffers>();
+function beginSearch(world: World): SearchBuffers {
+  let state = searchBuffers.get(world);
+  if (!state || state.size !== world.size) {
+    const count = world.size * world.size;
+    state = {
+      size: world.size,
+      generation: 0,
+      scores: new Float64Array(count),
+      parents: new Int32Array(count),
+      seen: new Uint32Array(count),
+      closed: new Uint32Array(count),
+    };
+    searchBuffers.set(world, state);
+  }
+  state.generation = (state.generation + 1) >>> 0;
+  if (state.generation === 0) {
+    state.seen.fill(0);
+    state.closed.fill(0);
+    state.generation = 1;
+  }
+  return state;
+}
+
 const STEP_COST: Record<number, number> = {
   2: 12, // sand
   3: 10, // grass
@@ -88,6 +128,24 @@ const STEP_COST: Record<number, number> = {
 
 function stepCost(tile: number): number {
   return STEP_COST[tile] ?? 14;
+}
+
+// Integer octile costs keep mathematically equal f-scores exactly equal.
+const CARDINAL = 1000;
+const DIAGONAL = 1414;
+function heuristic(dx: number, dy: number): number {
+  return (Math.max(dx, dy) - Math.min(dx, dy)) * CARDINAL + Math.min(dx, dy) * DIAGONAL;
+}
+
+function expand(budget?: SearchBudget): boolean {
+  if (!budget) return true;
+  if (budget.remaining <= 0) {
+    budget.exhausted = true;
+    return false;
+  }
+  budget.remaining--;
+  budget.expanded++;
+  return true;
 }
 
 /**
@@ -102,6 +160,7 @@ export function findPath(
   ty: number,
   maxNodes = 2600,
   uniformCost = false,
+  budget?: SearchBudget,
 ): Point[] | null {
   const size = world.size;
   if (sx === tx && sy === ty) return [];
@@ -110,11 +169,11 @@ export function findPath(
   const start = sy * size + sx;
   const goal = ty * size + tx;
   const open = new MinHeap();
-  const gScore = new Map<number, number>();
-  const cameFrom = new Map<number, number>();
-  const closed = new Set<number>();
-
-  gScore.set(start, 0);
+  const state = beginSearch(world);
+  const { scores, parents, seen, closed, generation } = state;
+  scores[start] = 0;
+  parents[start] = -1;
+  seen[start] = generation;
   open.push(start, 0);
 
   let expanded = 0;
@@ -127,21 +186,21 @@ export function findPath(
       let cursor = current;
       while (cursor !== start) {
         path.push({ x: cursor % size, y: (cursor / size) | 0 });
-        const prev = cameFrom.get(cursor);
-        if (prev === undefined) return null;
+        const prev = parents[cursor];
+        if (prev < 0 || seen[prev] !== generation) return null;
         cursor = prev;
       }
       path.reverse();
       return path;
     }
-    if (closed.has(current)) continue;
-    closed.add(current);
-    expanded += 1;
-    if (expanded > maxNodes) return null;
+    if (closed[current] === generation) continue;
+    if (expanded >= maxNodes || !expand(budget)) return null;
+    closed[current] = generation;
+    expanded++;
 
     const cx = current % size;
     const cy = (current / size) | 0;
-    const currentG = gScore.get(current) ?? Infinity;
+    const currentG = scores[current];
 
     for (let dy = -1; dy <= 1; dy += 1) {
       for (let dx = -1; dx <= 1; dx += 1) {
@@ -155,27 +214,27 @@ export function findPath(
           if (!isWalkableAt(world, cx + dx, cy) || !isWalkableAt(world, cx, cy + dy)) continue;
         }
         const neighbor = ny * size + nx;
-        if (closed.has(neighbor)) continue;
+        if (closed[neighbor] === generation) continue;
         const tile = world.terrain[neighbor];
         const diagonal = dx !== 0 && dy !== 0;
-        const g = currentG + (uniformCost ? 10 : stepCost(tile)) * (diagonal ? Math.SQRT2 : 1);
-        const known = gScore.get(neighbor);
-        if (known !== undefined && known <= g) continue;
-        gScore.set(neighbor, g);
-        cameFrom.set(neighbor, current);
+        const g = currentG + (uniformCost ? 10 : stepCost(tile)) * (diagonal ? DIAGONAL : CARDINAL);
+        if (seen[neighbor] === generation && scores[neighbor] <= g) continue;
+        seen[neighbor] = generation;
+        scores[neighbor] = g;
+        parents[neighbor] = current;
         const ax = Math.abs(nx - tx);
         const ay = Math.abs(ny - ty);
-        const h = (Math.max(ax, ay) + (Math.SQRT2 - 1) * Math.min(ax, ay)) * 10;
-        open.push(neighbor, g + h, -g);
+        const h = heuristic(ax, ay) * 10;
+        open.push(neighbor, g + h, g);
       }
     }
   }
   return null;
 }
 
-/** Uniform water step cost keeps sea routes shortest in tile count. */
-const SEA_CARDINAL_COST = 10;
-const SEA_DIAGONAL_COST = 10 * Math.SQRT2;
+/** Water uses uniform terrain costs with the same octile travel distance. */
+const SEA_CARDINAL_COST = CARDINAL;
+const SEA_DIAGONAL_COST = DIAGONAL;
 
 function isSeaTile(world: World, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= world.size || y >= world.size) return false;
@@ -184,8 +243,8 @@ function isSeaTile(world: World, x: number, y: number): boolean {
 
 /**
  * A* across open water only. Same deterministic neighbour order and
- * no-corner-cutting rule as `findPath`, but the node budget is separate so a
- * long crossing cannot starve land routing. Returns tiles from (but excluding)
+ * no-corner-cutting rule as `findPath`. The local sea-search ceiling also
+ * respects an optional shared work allowance. Returns tiles from (but excluding)
  * the start to (and including) the goal, or null when there is no water route
  * within the budget.
  */
@@ -196,6 +255,7 @@ export function findSeaPath(
   tx: number,
   ty: number,
   maxNodes = SEA_PATH_NODES,
+  budget?: SearchBudget,
 ): Point[] | null {
   const size = world.size;
   if (sx === tx && sy === ty) return [];
@@ -204,11 +264,11 @@ export function findSeaPath(
   const start = sy * size + sx;
   const goal = ty * size + tx;
   const open = new MinHeap();
-  const gScore = new Map<number, number>();
-  const cameFrom = new Map<number, number>();
-  const closed = new Set<number>();
-
-  gScore.set(start, 0);
+  const state = beginSearch(world);
+  const { scores, parents, seen, closed, generation } = state;
+  scores[start] = 0;
+  parents[start] = -1;
+  seen[start] = generation;
   open.push(start, 0);
 
   let expanded = 0;
@@ -221,21 +281,21 @@ export function findSeaPath(
       let cursor = current;
       while (cursor !== start) {
         path.push({ x: cursor % size, y: (cursor / size) | 0 });
-        const prev = cameFrom.get(cursor);
-        if (prev === undefined) return null;
+        const prev = parents[cursor];
+        if (prev < 0 || seen[prev] !== generation) return null;
         cursor = prev;
       }
       path.reverse();
       return path;
     }
-    if (closed.has(current)) continue;
-    closed.add(current);
-    expanded += 1;
-    if (expanded > maxNodes) return null;
+    if (closed[current] === generation) continue;
+    if (expanded >= maxNodes || !expand(budget)) return null;
+    closed[current] = generation;
+    expanded++;
 
     const cx = current % size;
     const cy = (current / size) | 0;
-    const currentG = gScore.get(current) ?? Infinity;
+    const currentG = scores[current];
 
     for (let dy = -1; dy <= 1; dy += 1) {
       for (let dx = -1; dx <= 1; dx += 1) {
@@ -248,19 +308,19 @@ export function findSeaPath(
           if (!isSeaTile(world, cx + dx, cy) || !isSeaTile(world, cx, cy + dy)) continue;
         }
         const neighbor = ny * size + nx;
-        if (closed.has(neighbor)) continue;
+        if (closed[neighbor] === generation) continue;
         const diagonal = dx !== 0 && dy !== 0;
         const g = currentG + (diagonal ? SEA_DIAGONAL_COST : SEA_CARDINAL_COST);
-        const known = gScore.get(neighbor);
-        if (known !== undefined && known <= g) continue;
-        gScore.set(neighbor, g);
-        cameFrom.set(neighbor, current);
+        if (seen[neighbor] === generation && scores[neighbor] <= g) continue;
+        seen[neighbor] = generation;
+        scores[neighbor] = g;
+        parents[neighbor] = current;
         const ax = Math.abs(nx - tx);
         const ay = Math.abs(ny - ty);
-        const h = (Math.max(ax, ay) + (Math.SQRT2 - 1) * Math.min(ax, ay)) * 10;
+        const h = heuristic(ax, ay);
         // Break equal-cost ties toward the deeper node so open water (many
         // equal octile routes) cannot exhaust the node budget.
-        open.push(neighbor, g + h, -g);
+        open.push(neighbor, g + h, g);
       }
     }
   }

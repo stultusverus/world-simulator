@@ -21,6 +21,7 @@ import {
   Job,
   type Building,
   type CampaignHistory,
+  type CampaignVerification,
   type ChronicleKind,
   type Civ,
   type SpawnSite,
@@ -82,6 +83,9 @@ export class Game {
   relations = new Float32Array(MAX_FACTIONS * MAX_FACTIONS);
   wars: War[] = [];
   campaignHistory: CampaignHistory[] = [];
+  campaignVerifications: CampaignVerification[] = [];
+  /** Saved scheduling decisions, not derived paths or crossing plans. */
+  navalProbeCursors = new Map<string, number>();
   chronicle = new Chronicle();
   rng: RNG;
   speed = 1;
@@ -153,6 +157,8 @@ export class Game {
       }
       this.wars = save.wars.map((war) => ({ ...war }));
       this.campaignHistory = save.campaignHistory.map((history) => ({ ...history }));
+      this.campaignVerifications = save.campaignVerifications.map((check) => ({ ...check }));
+      this.navalProbeCursors = new Map(save.navalProbeCursors);
       this.relations.set(save.relations);
       this.chronicle.entries = save.chronicle.map((entry) => ({ ...entry }));
       this.nextBuildingId = save.nextBuildingId;
@@ -227,6 +233,8 @@ export class Game {
       buildings: this.buildings.map((building) => ({ ...building })),
       wars: this.wars.map((war) => ({ ...war })),
       campaignHistory: this.campaignHistory.map((history) => ({ ...history })),
+      campaignVerifications: this.campaignVerifications.map((check) => ({ ...check })),
+      navalProbeCursors: [...this.navalProbeCursors],
       relations: this.relations.slice(),
       agents: this.agents.toSnapshot(),
       animals: this.animals.toSnapshot(),
@@ -436,6 +444,8 @@ export class Game {
     this.reachability = computeReachability(this.world);
     this.navalPlans.clear();
     this.soldierPaths.clear();
+    this.campaignVerifications = [];
+    this.navalProbeCursors.clear();
   }
 
   markTerrainChanged(index: number): void {

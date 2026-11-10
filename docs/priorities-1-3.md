@@ -4,6 +4,11 @@ Implemented against `main` at `d70aa03` on `feat/reachable-wars-households-econo
 The [initial observation](observation-2000.md) supplies the before-state for
 256² seed `OBSERVE-2000`.
 
+The original validation below describes commit `642a701` (save format 7). The subsequent
+[PR review fixes](pr13-review-fixes.md) correct long-route A* and bound aggregate routing
+work; current save format is 8. Historical audit numbers below have not been rerun on
+that changed simulation trajectory.
+
 ## Behaviour
 
 **Campaigns.** AI declarations now verify a usable route to an eligible enemy building,
@@ -53,7 +58,7 @@ scholarship also improves construction and repair efficiency by up to 10%, with
 diminishing returns. Unstaffed institutions do not charge scholarship. Existing
 patronage and festivals continue.
 
-**Persistence.** Save version is **7**. War progress, targets, arrival deadlines and
+**Persistence at the original validation.** Save version was **7**. War progress, targets, arrival deadlines and
 failed-pair cooldowns are persisted; route caches remain derived. Version-6 and older
 saves are explicitly refused, following the project's existing no-migration policy.
 The baseline observation's version-6 snapshots remain historical artifacts.

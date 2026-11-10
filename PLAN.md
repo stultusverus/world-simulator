@@ -1,7 +1,7 @@
 # Worldsmith — Plan & Progress
 
 > **Living document.** Update this file instead of replacing it when scope, status or
-> priorities change. Last updated: **2026-11-09**.
+> priorities change. Last updated: **2026-11-10**.
 >
 > **Code baseline:** `main` @ `d70aa03` (PR #12 merged). **Iteration branch:**
 > `feat/reachable-wars-households-economy` (priorities 1–3; PR only, no merge or deploy).
@@ -95,18 +95,37 @@ In one line: **WorldBox-style living world, focused on societies rather than dis
 | 10 | Post-fix audit: verified extinction path, population and settlement health; recorded remaining economy/cap/naval/religion gaps | ✅ Done | PR #11; 85 tests; audit runs |
 | 11 | Late-game society & balance: laborers, civic buildings, upkeep/festivals, population-gated four-city expansion, wounded retreat, cap/workforce HUD | ✅ Done | `feat/late-game-society`; 96 tests; 512²/256² audits |
 | 12 | Audit follow-up: fair cap allocation, post-war recovery, late-game economy and war fixes, extinction/cap feedback | ✅ Done | PR #12 follow-up; 104 tests; 2,000-year audit rerun |
-| 13 | Route-verified campaigns, household migration/local housing, repairs and continuing civic spending | ✅ Done | 119 local checks; six-world audit; browser save/load; [implementation audit](docs/priorities-1-3.md) |
+| 13 | Route-verified campaigns, household migration/local housing, repairs and continuing civic spending | ✅ Done | 119 local checks at `642a701`; six-world audit; [implementation audit](docs/priorities-1-3.md) |
+| 14 | PR #13 review: correct oblique A*, cap aggregate planning, persist fair retries | ✅ Done | 131 local checks; PROFILE timing comparison; browser continuation; [review fixes](docs/pr13-review-fixes.md) |
 
 ## 5. Verification snapshot
 
-Priorities 1–3 are implemented and locally verified: **119/119 checks across 25 files**,
+**2026-11-10 — PR #13 review fixes:** corrected integer octile A* ties and heap tie
+bookkeeping, including long oblique land/sea routes. All simulation routing now shares
+six searches / 16,384 expanded nodes per year. Preflight candidates and coast probes
+advance across retries, eligible pairs rotate, and still-valid pair verifications survive
+new target construction. Exhaustion defers work. Save format 8 persists scheduling
+decisions; paths/crossing plans remain derived. Typecheck, **131/131 checks across
+27 files**, build and browser save/load continuation pass. Measured before/after timings
+are in [the review report](docs/pr13-review-fixes.md). No CI workflow.
+
+New **3,000-year observation** on commit `642a701` sampled twelve fresh worlds across
+256², 512² and 1024². Eleven reached year 3000; **Valecourt in 512² BRAVO went extinct
+at year 1464**, with 305 starvation deaths after repeated farm destruction. Its three
+centres and 888 housing survived until population loss; shrinking building capacity
+and basic upkeep blocked food reconstruction. Small worlds remained near the birth
+limit; larger worlds remained under capacity and often material-poor. Twelve save round-trips and continuation checks,
+plus three independent full replays, matched exactly. See [full findings](docs/audit-3000.md).
+This was observation only: no implementation changes, CI workflow or publication.
+
+Original priorities 1–3 validation at `642a701`: **119/119 checks across 25 files**,
 strict typecheck and production build pass. Six fresh worlds across all three sizes
 reached year 2000 without extinction. `OBSERVE-2000` no-contact endings fell 9 → 0;
 local overcrowding fell 47 → 0 residents; material/knowledge saturation disappeared in
 the four small-world audit seeds. Combat deaths increased 437 → 800, and large-world
 uneven growth/material balances remain explicit limits. Browser creation, war,
 autosave resume and manual save/load were exercised; managed policy blocked DevTools.
-Save version is 7 (older saves refused). See [implementation and results](docs/priorities-1-3.md).
+Save version was 7 at that validation (current version: 8). See [implementation and results](docs/priorities-1-3.md).
 All checks are local; **no CI workflow** was added.
 
 Fresh observation on **2026-11-09**, baseline `d70aa03`: default 256² seed
@@ -347,3 +366,9 @@ the follow-up implementation addressed the first two, and the remaining gaps are
   spending/renewal, continuous scholarship and peacetime material-funded repairs. Save
   version 7 persists campaign progress and pair cooldowns; version 6 is refused, without
   migration. All validation remains local; no CI workflow, merge or deployment.
+
+- **2026-11-10 — PR #13 review:** accepted both major comments. Fixed integer octile
+  scores, deeper-node ties and heap pop bookkeeping; bounded all land/sea routing per
+  year and made candidate/coast retries progress. Persist verification/scheduling in
+  version 8 for deterministic cold-load continuation, while keeping route plans derived.
+  Existing version-7 audits remain historical evidence. No CI workflow, merge or deploy.
